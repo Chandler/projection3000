@@ -1,0 +1,5 @@
+{
+  "name": "RGB Profile Encoder",
+  "kind": "profileEncoder",
+  "file": "RGB Profiles.metal"
+}

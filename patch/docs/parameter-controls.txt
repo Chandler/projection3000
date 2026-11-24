@@ -1,0 +1,68 @@
+PATCH PARAMETER CONTROLS — live performance style guide
+2026-11-14
+
+Choose controls by meaning and likely action. Continuous values should be
+adjustable by dragging; typing is secondary. Preserve exact numeric entry.
+
+Amount (opacity, mix, softness): slider, meaningful units, zero and default.
+Signed offset: slider filled from marked zero, small zero detent, zero button.
+Pan/balance: center-origin slider, L/R labels and Center action.
+Multiplier: positive slider, 1× neutral marker and action, default reset.
+Frequency / broad timing: logarithmic travel when the minimum is positive.
+Count: stepper or explicit choices; whole-number metadata.
+Category: segmented control for short sets, menu for long sets.
+Boolean: toggle. Trigger: button.
+Position: direct manipulation / XY control, axis controls, Center action.
+Angle / phase: show cyclic meaning and units; distinguish absolute from offset.
+Seed: New variation, undo, exact seed recall; do not imply numeric proximity
+means visual similarity.
+Time window: duration-relative handles and playhead actions, exact entry.
+
+COLOR
+Color controls must provide color guidance. Hue uses a spectrum. Temperature
+uses cool–neutral–warm colors and labels. Saturation uses gray-to-hue guidance;
+brightness uses dark-to-color guidance. Packed colors remain color wells, never
+numeric performance parameters. Preserve hue when choosing gray or black.
+For hue shifts of multicolor images, tracks are references, not predicted output;
+representative before/after palette swatches are the preferred richer treatment.
+Opacity should use checkerboard guidance. Native color wells / Pose's existing
+contextual color controls remain available.
+
+RECOVERY AND RANGE
+Zero, neutral and default are different. A speed can stop at zero, run normally
+at 1× and have another authored default. Provide explicit recovery actions.
+A reset is one undo action. A drag is one undo action. Avoid moving targets.
+Use negatives for meaningful reverse motion, displacement, attenuation or cuts;
+never extend an engine's range simply to make a control symmetric.
+Asymmetric signed ranges retain proportional travel and mark zero in its actual
+position; fill originates at zero, not the left edge. A detent aids landing.
+MIDI and modulation keep stored parameter units. UI curves currently affect
+mouse travel only; MIDI response must be configured separately until curve
+metadata is shared with MIDI mapping.
+
+IMPLEMENTED IN THIS PASS
+Shared ParameterControl: continuous signed sliders with zero-origin fill and
+zero detent; keyboard/accessibility adjustments; optional spec-driven defaults,
+neutral 1× landmarks for common multiplier keys, color tracks, positive Hz/ms/
+scale/zoom logarithmic travel, seed variation controls. Existing pan preserved.
+Metadata is passed by generic inspector, node-app rows, Mesh Gradient and most
+custom scalar inspectors. Existing numeric fields retained. Noise octave/seed
+and Face Replace index metadata corrected. No persisted key or value changes.
+
+AUDIT / FOLLOW-UP
+The metadata currently has bounds/default/choices/step/MIDI eligibility, but no
+explicit quantity, unit, neutral, response curve or contextual color model.
+This pass uses established keys/titles for presentation. Future custom shaders
+should declare semantics instead of relying on fallback Control 1–4 names.
+Further work: shared curve metadata for MIDI; palette-aware before/after hue
+swatches; contextual saturation in every inspector; opacity checkerboards;
+cyclic wrap gestures; duration-relative loop handles; consistent reset on
+categorical and bespoke controls. These are not implemented by this pass.
+Trace's manually logarithmic control remains unchanged to avoid applying the
+curve twice. LED matrix's existing ticked row/column sliders are retained.
+Pose's dedicated color surface remains the reference for contextual colors.
+
+COMPATIBILITY
+Existing patches retain keys, values, defaults and ranges. Adding step metadata
+changes how new edits are made; it does not rewrite saved graphs. No migration
+is needed. User-authored project files are not rewritten by this work.

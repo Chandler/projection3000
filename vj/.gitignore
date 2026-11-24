@@ -1,0 +1,27 @@
+# Local dependencies and generated outputs
+.venv/
+__pycache__/
+*.py[cod]
+node_modules/
+build/
+dist/
+.DS_Store
+
+# Personal runtime state and machine notes
+/g10/*.private.md
+
+# Legacy state locations (existing installations remain supported)
+/session.json*
+/scenes.json*
+/presets.json*
+/shows.json*
+/fixtures.json*
+/mapping_state.json*
+/launcher.json*
+/videos/
+
+/ndi-clients.json
+
+# Python tooling cache
+.ruff_cache/
+/data/

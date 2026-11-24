@@ -1,0 +1,11 @@
+build/
+node_modules/
+.DS_Store
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+**/xcuserdata/
+*.xcuserstate
+__pycache__/
+*.py[cod]
+.build/

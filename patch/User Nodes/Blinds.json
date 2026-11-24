@@ -1,0 +1,12 @@
+{
+  "name": "Blinds",
+  "file": "Blinds.metal",
+  "kind": "shaderEffect",
+  "parameterTitles": {
+    "p1": "Bar Count (\u00d710)",
+    "p2": "Color Pattern",
+    "p3": "Gap Size",
+    "p4": "Vertical Offset"
+  },
+  "controlStyle": "blinds"
+}

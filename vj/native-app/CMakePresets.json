@@ -1,0 +1,57 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "core",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/core",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VJ_BUILD_MAC_UI": "OFF",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "mac",
+      "inherits": "core",
+      "binaryDir": "${sourceDir}/build/mac",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "VJ_BUILD_MAC_UI": "ON",
+        "VJ_ENABLE_LINK": "ON"
+      }
+    },
+    {
+      "name": "render",
+      "inherits": "core",
+      "binaryDir": "${sourceDir}/build/render",
+      "cacheVariables": {
+        "VJ_BUILD_ENGINE": "ON",
+        "VJ_ENABLE_LINK": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "core",
+      "configurePreset": "core"
+    },
+    {
+      "name": "mac",
+      "configurePreset": "mac"
+    },
+    {
+      "name": "render",
+      "configurePreset": "render"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "core",
+      "configurePreset": "core",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

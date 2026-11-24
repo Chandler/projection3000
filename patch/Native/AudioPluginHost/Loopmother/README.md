@@ -1,0 +1,1 @@
+Loopmother DSP copied from loop2/Source on 2026-11-01. The SynthEngine, SynthTuning and RealtimeQueue files retain Loop’s implementation. Patch hosts each instance on its audio graph queue through LoopmotherBridge.cpp. This is a Grandmother-inspired digital synth, not a circuit emulation.

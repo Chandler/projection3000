@@ -1,0 +1,7 @@
+{
+  "wled_host": "your-wled-controller.local",
+  "wled_port": 21324,
+  "fixtures": [
+    {"id": "strip-1", "label": "Strip 1", "count": 60, "start": 0}
+  ]
+}

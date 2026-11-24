@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>com.vibe.native-development.@VJ_HELPER_NAME@</string>
+<key>CFBundleName</key><string>@VJ_HELPER_NAME@</string>
+<key>CFBundleExecutable</key><string>@VJ_HELPER_NAME@</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>NSCameraUsageDescription</key><string>Use the selected camera as a live video source.</string>
+<key>NSLocalNetworkUsageDescription</key><string>Discover and receive NDI video sources on your local network.</string>
+<key>NSBonjourServices</key><array><string>_ndi._tcp</string></array>
+</dict></plist>
