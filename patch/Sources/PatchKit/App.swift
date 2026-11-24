@@ -31,7 +31,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     var tabRunning = true
     var changingRunState = false
     var initialTabSession: [String:Any]?
-    var pendingTabSession: [String:Any]?
     var pendingOpenFiles: [String] = []
     var tabStrip: NSStackView?
     var tabStripSignature = ""
@@ -97,7 +96,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     var recoveryURL: URL { if ProcessInfo.processInfo.environment["PATCH_SESSION_PATH"] != nil, let sessionURL { return sessionURL.deletingLastPathComponent().appendingPathComponent("Recovery.patch.json") }; return FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Patch/Recovery.patch.json") }
     func applicationDidFinishLaunching(_ notification: Notification) {
         do { try start() }
-        catch { if headless { fputs("Patch startup: \(error.localizedDescription)\n",stderr); exit(1) }; NSAlert(error:error).runModal(); NSApp.terminate(nil) }
+        catch {
+            stop(saveSession: false)
+            if headless { fputs("Patch startup: \(error.localizedDescription)\n",stderr); exit(1) }
+            NSAlert(error:error).runModal()
+            NSApp.terminate(nil)
+        }
     }
     func start() throws {
         workspace.remembersRecentProjects = !headless
@@ -161,21 +165,37 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         if !embedded && !headless && tabOwner == nil && !args.contains("--project") && !args.contains("--session") && !args.contains("--restore") {
             workspace.reopenRecentProject(excluding:recoveryURL)
         }
-        if args.contains("--restore"), FileManager.default.fileExists(atPath:recoveryURL.path) { try? workspace.load(recoveryURL) }
+        func pathArgument(_ flag: String) throws -> URL? {
+            guard let i = args.firstIndex(of:flag) else { return nil }
+            guard args.indices.contains(i+1), !args[i+1].hasPrefix("--") else { throw GraphError("Missing path for "+flag) }
+            return URL(fileURLWithPath:args[i+1])
+        }
+        func openGraph(_ url: URL) throws {
+            do { try workspace.load(url) }
+            catch { throw GraphError("Open project \(url.path): \(error.localizedDescription)") }
+        }
+        if args.contains("--restore") { try openGraph(recoveryURL) }
+        let restoreURL = try pathArgument("--session")
         var incomingSession = initialTabSession
-        if let index = args.firstIndex(of:"--session"), args.indices.contains(index+1) {
-            incomingSession = (try? JSONSerialization.jsonObject(with:Data(contentsOf:URL(fileURLWithPath:args[index+1])))) as? [String:Any]
-        }
-        if !embedded, tabOwner == nil, let tabs = incomingSession?["tabs"] as? [[String:Any]] {
-            pendingTabSession = incomingSession
-            incomingSession = try tabs.first ?? ["graph":try JSONSerialization.jsonObject(with:JSONEncoder().encode(Graph())),"running":false,"dirty":false]
-        }
-        if let object = incomingSession {
-            do {
-                guard let graphObject = object["graph"] else { throw GraphError("Invalid session file") }
+        var tabSnapshots: [[String:Any]] = []
+        var restoredTabID: String?
+        do {
+            if let restoreURL {
+                let data = try Data(contentsOf:restoreURL)
+                guard let object = try JSONSerialization.jsonObject(with:data) as? [String:Any] else { throw GraphError("Expected a session object") }
+                incomingSession = object
+            }
+            if let tabsValue = incomingSession?["tabs"] {
+                guard !embedded, tabOwner == nil, let tabs = tabsValue as? [[String:Any]] else { throw GraphError("Invalid tab session") }
+                tabSnapshots = tabs
+                restoredTabID = incomingSession?["activeTab"] as? String
+                incomingSession = try tabs.first ?? ["graph":try JSONSerialization.jsonObject(with:JSONEncoder().encode(Graph())),"running":false,"dirty":false]
+            }
+            if let object = incomingSession {
+                guard let graphObject = object["graph"] as? [String:Any] else { throw GraphError("Expected a graph object") }
                 tabID = (object["tabID"] as? String).flatMap(UUID.init(uuidString:)) ?? tabID
                 tabRunning = object["running"] as? Bool ?? true
-                let graph = try JSONDecoder().decode(Graph.self,from:JSONSerialization.data(withJSONObject:graphObject))
+                let graph = try Graph.read(JSONSerialization.data(withJSONObject:graphObject))
                 try workspace.apply(graph,action:"Restore Session")
                 workspace.undo.removeAllActions()
                 workspace.selected = (object["selection"] as? String).flatMap(UUID.init(uuidString:))
@@ -192,9 +212,19 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 if let midiState = object["midi"] as? [String:Any],let node = (midiState["followNode"] as? String).flatMap(UUID.init(uuidString:)),workspace.graph.node(node)?.kind == .ab {
                     try midi.setFollow(node,enabled:true)
                 }
-            } catch { if embedded { throw error }; workspace.message = "Session restore: \(error.localizedDescription)" }
+            }
+            // All tabs must restore before this controller can persist the session.
+            for (offset,snapshot) in tabSnapshots.dropFirst().enumerated() {
+                do { _ = try createTab(snapshot:snapshot,select:false) }
+                catch { throw GraphError("Tab \(offset+2): \(error.localizedDescription)") }
+            }
+        } catch {
+            for tab in tabChildren { tab.stop(saveSession:false); tab.window.orderOut(nil) }
+            tabChildren.removeAll()
+            if let restoreURL { throw GraphError("Restore session \(restoreURL.path): \(error.localizedDescription)") }
+            throw error
         }
-        if let index = args.firstIndex(of:"--project"), args.indices.contains(index+1) { do { try workspace.load(URL(fileURLWithPath:args[index+1])) } catch { workspace.message = error.localizedDescription } }
+        if let url = try pathArgument("--project") { try openGraph(url) }
         if tabRunning { renderer.start(graph:workspace.graph,playing:workspace.playing) }
         else { renderer.stop(); workspace.plugins.setSuspended(true); suspendTabMIDI() }
         started = true
@@ -229,14 +259,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 }
             }
             self.restoredSession = nil
-            if let session = self.pendingTabSession {
-                self.pendingTabSession = nil
-                for snapshot in (session["tabs"] as? [[String:Any]] ?? []).dropFirst() {
-                    do { _ = try self.createTab(snapshot: snapshot, select:false) }
-                    catch { self.workspace.message = "Tab restore: \(error.localizedDescription)" }
-                }
-                let selected = session["activeTab"] as? String
-                let tab = self.openTabs.first { $0.tabID.uuidString == selected } ?? self
+            if let selected = restoredTabID, let tab = self.openTabs.first(where:{ $0.tabID.uuidString == selected }) {
                 self.selectProjectTab(tab)
             }
             self.updateTitle()
@@ -726,8 +749,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         return .terminateNow
     }
     func writeSession() throws {
+        guard started else { return }
         if let tabOwner { try tabOwner.writeSession(); return }
-        guard started, let sessionURL else { return }
+        guard let sessionURL else { return }
         try FileManager.default.createDirectory(at:sessionURL.deletingLastPathComponent(),withIntermediateDirectories:true)
         let session: [String:Any] = ["pinnedPreviews":pinnedPreviewState,"midi":["followNode":midi?.followNode?.uuidString as Any? ?? NSNull()],"graph":try JSONSerialization.jsonObject(with:JSONEncoder().encode(workspace.graph)),
             "selection":workspace.selected?.uuidString as Any? ?? NSNull(),"selectedNodes":workspace.selectedIDs.map(\.uuidString),

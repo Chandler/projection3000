@@ -21,7 +21,7 @@ float3 splitSample(texture2d<float,access::sample> tex,float2 uv,uint edges,bool
     else if(edges==3 && (any(uv<0) || any(uv>1))) return float3(cmyk ? 1 : 0);
     return tex.sample(linearSampler,uv).rgb;
 }
-float3 matrixInput(texture2d<float,access::sample> source,texture2d<float,access::sample> lightCells,float2 uv,constant float *data,float time) {
+float3 matrixInput(texture2d<float,access::sample> source,texture2d<float,access::sample> lightCells,float2 uv,constant float *data,float time,float blend = -1) {
 #ifdef MATRIX_FLASH_PRIMARY
     float3 signal=matrixDriver::flash(uv,time,data);
 #elif defined(MATRIX_CELL_FIELD)
@@ -34,17 +34,22 @@ float3 matrixInput(texture2d<float,access::sample> source,texture2d<float,access
     float3 signal=source.sample(linearSampler,uv).rgb;
 #endif
 #ifdef MATRIX_FLASH_LIGHT
-    signal*=matrixLight::flash(uv,data[31],data+16);
+    float3 modulation=matrixLight::flash(uv,data[31],data+16);
 #elif defined(MATRIX_CELL_LIGHT)
     constexpr sampler lightSampler(coord::normalized,address::clamp_to_edge,filter::nearest);
     float activityLight=lightCells.sample(lightSampler,uv).g;
-    signal*=mix(1.0,data[17]<0.5?1-activityLight:activityLight,data[16]);
+    float3 modulation=mix(1.0,data[17]<0.5?1-activityLight:activityLight,data[16]);
 #elif defined(MATRIX_LIGHT)
-    signal*=max(float3(0),matrixLight::animation(uv,data[31],float4(data[16],data[17],data[18],data[19]),float4(data[20],data[21],data[22],data[23]),float4(data[24],data[25],data[26],data[27]),float4(data[28],data[29],data[30],data[31])));
+    float3 modulation=matrixLight::animation(uv,data[31],float4(data[16],data[17],data[18],data[19]),float4(data[20],data[21],data[22],data[23]),float4(data[24],data[25],data[26],data[27]),float4(data[28],data[29],data[30],data[31]));
+    if(blend<0) modulation=max(float3(0),modulation);
+#elif defined(MATRIX_TEXTURE_LIGHT)
+    float3 modulation=lightCells.sample(linearSampler,uv).rgb;
+#else
+    float3 modulation=blend<0 ? float3(1) : float3(0);
 #endif
-    return signal;
+    return blend<0 ? signal*modulation : mix(signal,modulation,blend);
 }
-#ifdef MATRIX_LIGHT
+#if defined(MATRIX_LIGHT) && !defined(MATRIX_FLASH_LIGHT)
 // Node preview for a light field: neutral light (1.0) shows as mid gray.
 kernel void lightPreview(texture2d<float,access::write> output [[texture(0)]],constant float *data [[buffer(0)]],uint2 gid [[thread_position_in_grid]]) {
     if(gid.x>=output.get_width()||gid.y>=output.get_height()) return;
@@ -97,6 +102,8 @@ kernel void process(texture2d<float, access::sample> source [[texture(0)]],
         q = float2(c*q.x+s*q.y,-s*q.x+c*q.y);
         float2 st = q/float2(sourceAspect,1)*p.b.xy+0.5;
         col = all(st>=0) && all(st<=1) ? source.sample(linearSampler,st).rgb : float3(0);
+    } else if (op == 17 || op == 18) {
+        col=matrixInput(source,second,uv,audio,p.c.x,op==18 ? p.a.z : -1);
     } else if (op == 14) {
         float2 grid=p.a.xy, cellSize=size/grid;
         float2 cell=floor(uv*grid),center=(cell+0.5)/grid;
@@ -352,7 +359,7 @@ kernel void process(texture2d<float, access::sample> source [[texture(0)]],
         float3 tint = clamp(abs(fract(p.a.y+float3(0,2.0/3,1.0/3))*6-3)-1,0.0,1.0);
         col = mix(float3(0.015),mix(float3(0.3),tint,0.8),line);
     } else { col = source.sample(linearSampler, uv).rgb; }
-    output.write(float4(clamp(col, 0.0, 1.0), 1), gid);
+    output.write(float4(op == 18 ? col : clamp(col, 0.0, 1.0), 1), gid);
 }
 struct VertexOut { float4 position [[position]]; float2 uv; };
 vertex VertexOut fullscreen(uint id [[vertex_id]]) {

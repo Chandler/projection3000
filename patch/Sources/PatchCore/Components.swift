@@ -5,6 +5,7 @@ public struct Component: Codable, Equatable, Identifiable, Sendable {
     public var name: String
     public var members: [UUID]
     public var position: Position
+    public var interface: SubpatchInterface?
     public var collapsed: Bool
     public init(members: [UUID],position: Position) { id = UUID(); name = "Component"; self.members = members; self.position = position; collapsed = true }
 }
@@ -19,6 +20,12 @@ extension Graph {
     public func component(_ id: UUID) -> Component? { groups.first { $0.id == id } }
     public func collapsedOwner(_ id: UUID) -> Component? { groups.first { $0.collapsed && $0.members.contains(id) } }
     public func ports(_ component: Component,output: Bool) -> [ComponentPort] {
+        if let interface = component.interface {
+            return interface.ports.filter { $0.output == output }.compactMap { port in
+                guard let endpoint = try? resolveSubpatchPort(component,id:port.id,output:output) else { return nil }
+                return ComponentPort(node:endpoint.node,input:endpoint.index,type:port.type,name:port.name)
+            }
+        }
         let members = Set(component.members)
         return component.members.compactMap(node).flatMap { node -> [ComponentPort] in
             if output {
@@ -38,6 +45,7 @@ extension Graph {
         guard let id else { return nil }
         if let node = node(id) { return node }
         guard let component = component(id) else { return nil }
+        if let preview = component.interface?.preview { return node(preview) }
         let ordered = (try? orderedNodes()) ?? nodes
         return ordered.last { component.members.contains($0.id) }
     }

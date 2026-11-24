@@ -10,7 +10,7 @@ struct PublicationInspector: View {
                 VStack(alignment:.leading,spacing:8) {
                     if node.kind == .ab { Text("Automatic publishes this A/B output in VJ, including when connected to other nodes.").foregroundStyle(.secondary) }
                     ForEach(ports,id:\.id) { port in
-                        let settings = node.publications?[String(port.port)] ?? OutputPublication()
+                        let settings = node.publications?[port.portID] ?? OutputPublication()
                         Picker(port.type.rawValue.capitalized,selection:Binding(get:{ settings.mode },set:{ mode in set(port,mode:mode,name:settings.name) })) {
                             Text(node.publishesAutomatically ? "Automatic" : "Not published").tag("auto"); Text("Published").tag("on"); Text("Hidden").tag("off")
                         }
@@ -23,7 +23,7 @@ struct PublicationInspector: View {
     func set(_ port: PublishedPort,mode: String,name: String?) {
         workspace.update(node.id,action:"Publish Output") { node in
             node.publications = node.publications ?? [:]
-            node.publications?[String(port.port)] = OutputPublication(mode:mode,name:name)
+            node.publications?[port.portID] = OutputPublication(mode:mode,name:name)
         }
     }
 }

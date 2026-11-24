@@ -3,23 +3,24 @@ import PatchCore
 
 struct NodeBrowser: View {
     @State private var query = ""
-    private static let categories = ["USER GENERATED","CONTROL","SOURCE","GEOMETRY","RENDER","AUDIO","ANALYSIS","EFFECT","COLLECTION","TRACE","OUTPUT"]
+    private static let categories = ["USER GENERATED"] + Set(NodeKind.allCases.map(\.category)).subtracting(["USER GENERATED"]).sorted()
     @State private var collapsed = Set(Self.categories)
     @ObservedObject private var library = UserNodeLibrary.shared
     @ObservedObject var workspace: Workspace
     var body: some View {
+        let byCategory = Dictionary(grouping:CatalogNode.all.filter { $0.matches(query) },by:\.category)
         VStack(alignment:.leading,spacing:0) {
             Text("NODES").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary).padding(.horizontal,14).padding(.top,18)
-            TextField("Filter nodes",text:$query).textFieldStyle(.squareBorder).controlSize(.small).padding(12)
+            TextField("Name, in:type, out:type",text:$query).textFieldStyle(.squareBorder).controlSize(.small).padding(12)
             ScrollView {
                 VStack(alignment:.leading,spacing:6) {
                     ForEach(Self.categories,id:\.self) { category in
-                        let nodes = CatalogNode.all.filter { $0.category == category && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)) }
+                        let nodes = byCategory[category] ?? []
                         if !nodes.isEmpty || (category == "USER GENERATED" && library.root.matches(query)) {
                             VStack(alignment:.leading,spacing:4) {
                                 Button { workspace.dismissLibraryPreview(); if collapsed.contains(category) { collapsed.remove(category) } else { collapsed.insert(category) } } label: {
                                     HStack(spacing:6) { Image(systemName:collapsed.contains(category) && query.isEmpty ? "chevron.right" : "chevron.down").frame(width:8); Image(systemName:"folder"); Text(category); Spacer() }
-                                        .font(.system(size:9,weight:.medium,design:.monospaced)).foregroundStyle(.secondary).padding(.horizontal,12).padding(.vertical,7).contentShape(Rectangle())
+                                        .font(.system(size:11,weight:.semibold)).foregroundStyle(.secondary).padding(.horizontal,12).padding(.vertical,7).contentShape(Rectangle())
                                 }.buttonStyle(.plain).accessibilityLabel("\(category) folder")
                                     .contextMenu {
                                         if category == "USER GENERATED" {
@@ -28,6 +29,7 @@ struct NodeBrowser: View {
                                     }
                                 if !collapsed.contains(category) || !query.isEmpty {
                                     if category == "USER GENERATED" {
+                                        ForEach(nodes.filter { $0.file == nil }) { NodeBrowserRow(node:$0,workspace:workspace) }
                                         UserNodeFolderContents(folder:library.root,query:query,workspace:workspace)
                                     } else {
                                         ForEach(nodes) { NodeBrowserRow(node:$0,workspace:workspace) }
@@ -38,9 +40,15 @@ struct NodeBrowser: View {
                     }
                 }.padding(.top,8).padding(.bottom,18)
             }
+            if !library.diagnostics.isEmpty {
+                DisclosureGroup("Library issues · "+String(library.diagnostics.count)) {
+                    ForEach(library.diagnostics,id:\.self) { message in
+                        Text(message).font(.caption).textSelection(.enabled)
+                    }
+                }.padding(.horizontal,12)
+            }
             Button("Open User Folder…") { library.reveal() }.buttonStyle(.plain).font(.system(size:10)).padding(.horizontal,14).padding(.vertical,8)
             Spacer(minLength:0)
-            Text("Click to preview · Drag to add\n⌘F Add · Space Preview\n⌘-click: select · ⌘-drag: box select\nHold ⇧: cut or connect").font(.system(size:9,design:.monospaced)).foregroundStyle(.tertiary).padding(14)
         }.background(Color(nsColor:.patchPanel).opacity(0.65)).preferredColorScheme(.dark)
     }
 }
@@ -52,7 +60,7 @@ private struct NodeBrowserRow: View {
         Button { workspace.browse(node) } label: {
             HStack(spacing:8) {
                 Rectangle().fill(Color(nsColor:.node(node.kind))).frame(width:3,height:12)
-                Text(node.title).font(.system(size:11)).lineLimit(1)
+                Text(node.title).font(.system(size:13)).lineLimit(1)
                 Spacer(minLength:0)
             }.padding(.horizontal,14).padding(.vertical,7).background(workspace.libraryCatalogID == node.id ? Color(nsColor:.patchAccent).opacity(0.12) : .clear).contentShape(Rectangle())
         }.buttonStyle(.plain).help("Preview \(node.title); drag to add to the graph")
@@ -73,7 +81,7 @@ private struct UserNodeFolderContents: View {
         ForEach(folder.folders.filter { $0.matches(query) }) { child in
             UserNodeFolderRow(folder:child,query:query,workspace:workspace)
         }
-        ForEach(folder.nodes.filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }) { node in
+        ForEach(folder.nodes.filter { $0.matches(query) }) { node in
             NodeBrowserRow(node:node,workspace:workspace)
         }
     }

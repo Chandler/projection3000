@@ -16,6 +16,7 @@ final class ShaderResource {
     var modification: Date?
     var checked: Double = 0
     var revisionKey = ""
+    var fieldProgram: FieldProgram?
     var pipeline: MTLComputePipelineState?
     var error: String?
     var compiling = false
@@ -77,40 +78,6 @@ extension Renderer {
         return resource
     }
 }
-
-extension Renderer {
-    func matrixField(_ id: UUID,primary: Node?,light: Node?) -> ShaderResource? {
-        func file(_ node: Node?) -> String? { node.flatMap(ShaderCompiler.sourceURL) }
-        let primaryPath=file(primary),lightPath=file(light)
-        let path=(primaryPath ?? "video")+"|"+(lightPath ?? "none")
-        let resource: ShaderResource
-        if let current=shaders[id],current.path==path, current.kind == .ledMatrix { resource=current }
-        else {
-            resource=ShaderResource(path); resource.kind = .ledMatrix
-            if let previous=shaders[id], previous.kind == .ledMatrix { resource.pipeline=previous.pipeline }
-            shaders[id]=resource
-        }
-        let now=CACurrentMediaTime()
-        guard now-resource.checked>1,!resource.compiling else { return resource }
-        resource.checked=now
-        let revision=[primaryPath,lightPath].map { path -> String in
-            guard let path else { return "none" }
-            let date=(try? FileManager.default.attributesOfItem(atPath:path)[.modificationDate]) as? Date
-            return date.map { String($0.timeIntervalSinceReferenceDate) } ?? "missing"
-        }.joined(separator:"|")
-        guard revision != resource.revisionKey || (resource.pipeline == nil && resource.error == nil) else { return resource }
-        resource.revisionKey=revision; resource.compiling=true
-        let device=self.device
-        DispatchQueue.global(qos:.userInitiated).async { [weak resource] in
-            do {
-                let pipeline = try ShaderCompiler.matrix(primary:primaryPath.map { try String(contentsOfFile:$0) },light:lightPath.map { try String(contentsOfFile:$0) },primaryCells:primary?.kind == .cellularField,lightCells:light?.kind == .cellularField,device:device)
-                self.renderQueue.async { resource?.pipeline=pipeline; resource?.error=nil; resource?.compiling=false }
-            } catch { self.renderQueue.async { resource?.error=error.localizedDescription; resource?.compiling=false } }
-        }
-        return resource
-    }
-}
-
 
 extension Renderer {
     func dotShader(_ node: Node, geometry: Node, pattern: Node?) -> ShaderResource {

@@ -1,25 +1,11 @@
 import Foundation
 
 public enum NodePreviewKind: String, Codable, Sendable { case video, geometry, audio, control, palette, empty }
-public enum PortType: String, Codable, Sendable { case rgbProfiles, chromaReference, midi, vectorPath, drawRate, video, geometry, audio, faces, poses, field, control, dots, palette, collection, trace, visual
+public enum PortType: String, Codable, CaseIterable, Sendable { case rgbProfiles, chromaReference, midi, vectorPath, drawRate, video, geometry, audio, faces, poses, field, control, dots, palette, collection, trace, visual
     public func accepts(_ source: PortType?) -> Bool { guard let source else { return false }; return self == source || (self == .visual && (source == .video || source == .collection)) }
 }
-public struct ParameterSpec: Codable, Sendable {
-    public let key: String
-    public let title: String
-    public let min: Double
-    public let max: Double
-    public let initial: Double
-    public let choices: [String]?
-    public let midi: Bool?
-    public let step: Double?
-    public var supportsMIDI: Bool { midi ?? (choices == nil && max <= 1_000_000 && key != "seek") }
-    public init(_ key: String, _ title: String, _ min: Double, _ max: Double, _ initial: Double, choices: [String]? = nil, midi: Bool? = nil, step: Double? = nil) {
-        self.key = key; self.title = title; self.min = min; self.max = max; self.initial = initial; self.choices = choices; self.midi = midi; self.step = step
-    }
-}
 public enum NodeKind: String, Codable, CaseIterable, Sendable {
-    case flashCells, profileEncoder, profileAnalog, profileDecoder, rasterSynth, metroSequencer, loopmother, midiIn, midiFilter, midiTransform, midiMonitor, midiMerge, audioPlugin, chromaEncoder, chromaDecoder, arpeggiator, midiOut, vectorShape, vectorText, fluidShape, voltageEncoder, voltageVisualizer, voltageFluid, oscilloscope, audioInput, projector, posterText, posterComposer, videoCollection, apc40, glowFaces, powerGlitch, liveStream, lightningPulses, graphInkFlow, graphParticles, graphPulse, graphClouds, graphCloudParticles, flashFaces, surfaceGate, publishPalette, palette, videoPalette, paletteAdjust, meshGradient, ab, mux, layerMux, dotColors, flipDots, projectionDots, shaderEffect, cellularField, waterfallField, streakField, streakGlow, blockerField, ledMatrix, dataStream, pictureInPicture, channelSplit, channelColors, crop, yoloPose, poseRender, microphone, audioEnvelope, audioGain, audioMono, audioMix, audioFilter, audioEQ, audioOutput, lfo, noise, faceReplace, faceDetect, faceBoxes, scene, pattern, image, video, text, webcam, audio, waveform, audioVisualizer, lorenz, render, shader, dither, halftone, diffusion, modulation, crt, blend, color, window, syphon, ndi, ndiIn, record, recordAudio
+    case fieldShader, fieldRender, fieldMix, flashCells, profileEncoder, profileAnalog, profileDecoder, rasterSynth, metroSequencer, loopmother, midiIn, midiFilter, midiTransform, midiMonitor, midiMerge, audioPlugin, chromaEncoder, chromaDecoder, arpeggiator, midiOut, vectorShape, vectorText, fluidShape, voltageEncoder, voltageVisualizer, voltageFluid, oscilloscope, audioInput, projector, posterText, posterComposer, videoCollection, apc40, glowFaces, powerGlitch, liveStream, lightningPulses, graphInkFlow, graphParticles, graphPulse, graphClouds, graphCloudParticles, flashFaces, surfaceGate, publishPalette, palette, videoPalette, paletteAdjust, meshGradient, ab, mux, layerMux, dotColors, flipDots, projectionDots, shaderEffect, cellularField, waterfallField, streakField, streakGlow, blockerField, ledMatrix, dataStream, pictureInPicture, channelSplit, channelColors, crop, yoloPose, poseRender, microphone, audioEnvelope, audioGain, audioMono, audioMix, audioFilter, audioEQ, audioOutput, lfo, noise, faceReplace, faceDetect, faceBoxes, scene, pattern, image, video, text, webcam, audio, waveform, audioVisualizer, lorenz, render, shader, dither, halftone, diffusion, modulation, crt, blend, color, window, syphon, ndi, ndiIn, record, recordAudio
     public var title: String {
         switch self {
         case .profileEncoder: return "RGB Profile Encoder"
@@ -58,6 +44,9 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
         case .graphClouds: return "Graph Clouds"
         case .graphCloudParticles: return "Graph Cloud Particles"
         case .glowFaces: return "Glow Faces"
+        case .fieldShader: return "Field Shader"
+        case .fieldRender: return "Render Field"
+        case .fieldMix: return "Field Mix"
         case .flashCells: return "Flash Cells"
         case .flashFaces: return "Flash Faces"
         case .surfaceGate: return "Surface Gate"
@@ -130,21 +119,18 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
     }
     public var previewKind: NodePreviewKind {
         switch self {
-        case .flashCells, .metroSequencer, .midiIn, .midiFilter, .midiTransform, .midiMonitor, .midiMerge, .arpeggiator, .midiOut, .cellularField, .waterfallField, .streakField, .blockerField, .dataStream: return .empty
+        case .flashCells, .cellularField, .waterfallField, .streakField, .blockerField, .dataStream: return .video
+        case .metroSequencer, .midiIn, .midiFilter, .midiTransform, .midiMonitor, .midiMerge, .arpeggiator, .midiOut: return .empty
         case .apc40, .lfo, .noise, .audioEnvelope: return .control
         case .publishPalette, .palette, .videoPalette, .paletteAdjust: return .palette
         case .vectorShape, .vectorText, .fluidShape, .lorenz: return .geometry
         case .loopmother, .chromaEncoder, .audioInput, .voltageEncoder, .microphone, .audio, .audioGain, .audioMono, .audioMix, .audioPlugin, .audioFilter, .audioEQ, .audioOutput, .recordAudio: return .audio
-        case .profileEncoder, .profileAnalog, .profileDecoder, .rasterSynth, .chromaDecoder, .oscilloscope, .voltageVisualizer, .voltageFluid, .projector, .posterText, .posterComposer, .videoCollection, .glowFaces, .powerGlitch, .liveStream, .lightningPulses, .graphInkFlow, .graphParticles, .graphPulse, .graphClouds, .graphCloudParticles, .flashFaces, .surfaceGate, .meshGradient, .ab, .mux, .layerMux, .dotColors, .flipDots, .projectionDots, .shaderEffect, .ledMatrix, .pictureInPicture, .channelSplit, .channelColors, .crop, .yoloPose, .poseRender, .faceReplace, .faceDetect, .faceBoxes, .scene, .pattern, .image, .video, .text, .webcam, .waveform, .audioVisualizer, .render, .shader, .dither, .halftone, .diffusion, .modulation, .crt, .blend, .color, .window, .syphon, .ndi, .ndiIn, .record, .streakGlow: return .video
+        case .fieldShader, .fieldRender, .fieldMix, .profileEncoder, .profileAnalog, .profileDecoder, .rasterSynth, .chromaDecoder, .oscilloscope, .voltageVisualizer, .voltageFluid, .projector, .posterText, .posterComposer, .videoCollection, .glowFaces, .powerGlitch, .liveStream, .lightningPulses, .graphInkFlow, .graphParticles, .graphPulse, .graphClouds, .graphCloudParticles, .flashFaces, .surfaceGate, .meshGradient, .ab, .mux, .layerMux, .dotColors, .flipDots, .projectionDots, .shaderEffect, .ledMatrix, .pictureInPicture, .channelSplit, .channelColors, .crop, .yoloPose, .poseRender, .faceReplace, .faceDetect, .faceBoxes, .scene, .pattern, .image, .video, .text, .webcam, .waveform, .audioVisualizer, .render, .shader, .dither, .halftone, .diffusion, .modulation, .crt, .blend, .color, .window, .syphon, .ndi, .ndiIn, .record, .streakGlow: return .video
         }
     }
-    public var category: String { if isMIDINode { return "MIDI" }; if self == .posterText || self == .posterComposer { return "POSTER" }; if self == .vectorShape || self == .vectorText || self == .fluidShape { return "GEOMETRY" }; if self == .voltageVisualizer || self == .voltageFluid { return "RENDER" }; if self == .lightningPulses { return "TRACE" }; if self == .glowFaces || self == .graphInkFlow || self == .graphParticles || self == .graphPulse || self == .graphClouds || self == .graphCloudParticles || self == .flashFaces || self == .surfaceGate || self == .videoCollection || self == .layerMux { return "COLLECTION" }; if self == .apc40 || self == .lfo || self == .noise { return "CONTROL" }; if self == .meshGradient || self == .dotColors || self == .flipDots || self == .projectionDots || self == .scene || self == .dataStream || self == .blockerField || self == .streakField || self == .waterfallField || self == .cellularField || self == .streakGlow { return "USER GENERATED" }; if self == .videoPalette || self == .faceDetect || self == .yoloPose { return "ANALYSIS" }; return (isAudioNode || self == .recordAudio || self == .rasterSynth || self == .waveform || self == .audioVisualizer || self == .oscilloscope || self == .audioEnvelope) ? "AUDIO" : self == .lorenz ? "GEOMETRY" : (self == .render || self == .poseRender ? "RENDER" : (isOutput ? "OUTPUT" : (inputs.isEmpty ? "SOURCE" : "EFFECT"))) }
-    public var inputs: [String] { switch self { case .flashCells: return ["Palette"]; case .profileAnalog, .profileDecoder: return ["RGB Profiles"]; case .loopmother: return ["MIDI","Instrument"]; case .chromaEncoder: return ["Video"]; case .chromaDecoder: return ["Color Audio", "Frame Reference"]; case .metroSequencer, .midiIn, .arpeggiator, .vectorShape, .vectorText, .fluidShape, .audioInput, .posterText: return []; case .posterComposer: return PosterStyle.composerInputs; case .midiMerge: return ["MIDI A","MIDI B","MIDI C","MIDI D"]; case .midiFilter, .midiTransform, .midiMonitor, .midiOut: return ["MIDI"]; case .voltageEncoder: return ["Path"]; case .voltageVisualizer: return ["XY Audio", "Draw Rate", "X", "Y"]; case .voltageFluid: return ["XY Audio", "Draw Rate", "X", "Y", "Reflection"]; case .lightningPulses: return ["Palette","Phase"]; case .layerMux: return (1...8).map { "Layer \($0)" }; case .mux, .videoCollection: return (1...8).map { "Video \($0)" }; case .glowFaces, .graphInkFlow, .graphParticles, .graphPulse, .graphClouds, .graphCloudParticles, .flashFaces, .publishPalette, .paletteAdjust, .meshGradient: return ["Palette"]; case .projectionDots: return ["Colors"]; case .apc40, .powerGlitch, .liveStream, .palette, .dotColors, .flipDots, .cellularField, .waterfallField, .streakField, .streakGlow, .blockerField, .dataStream, .microphone, .lfo, .noise, .scene, .pattern, .image, .video, .text, .webcam, .ndiIn, .audio, .lorenz, .shader: return []; case .ledMatrix: return ["Video","Field","Light"]; case .poseRender: return ["Poses"]; case .record: return ["Video","Audio"]; case .audioMix: return ["Audio A","Audio B"]; case .rasterSynth, .audioEnvelope, .audioGain, .audioMono, .audioPlugin, .audioFilter, .audioEQ, .audioOutput, .recordAudio, .waveform, .audioVisualizer, .oscilloscope: return ["Audio"]; case .render: return ["Geometry"]; case .faceReplace: return ["Video A", "Video B", "Faces A", "Faces B"]; case .faceBoxes: return ["Video", "Faces"]; case .ab, .blend, .pictureInPicture: return ["A", "B"]; default: return ["Video"] } }
+    public var category: String { if self == .fieldShader { return "USER GENERATED" }; if isMIDINode { return "MIDI" }; if self == .posterText || self == .posterComposer { return "POSTER" }; if self == .vectorShape || self == .vectorText || self == .fluidShape { return "GEOMETRY" }; if self == .voltageVisualizer || self == .voltageFluid { return "RENDER" }; if self == .lightningPulses { return "TRACE" }; if self == .glowFaces || self == .graphInkFlow || self == .graphParticles || self == .graphPulse || self == .graphClouds || self == .graphCloudParticles || self == .flashFaces || self == .surfaceGate || self == .videoCollection || self == .layerMux { return "COLLECTION" }; if self == .apc40 || self == .lfo || self == .noise { return "CONTROL" }; if self == .meshGradient || self == .dotColors || self == .flipDots || self == .projectionDots || self == .scene || self == .dataStream || self == .blockerField || self == .streakField || self == .waterfallField || self == .cellularField || self == .streakGlow { return "USER GENERATED" }; if self == .videoPalette || self == .faceDetect || self == .yoloPose { return "ANALYSIS" }; return (isAudioNode || self == .recordAudio || self == .rasterSynth || self == .waveform || self == .audioVisualizer || self == .oscilloscope || self == .audioEnvelope) ? "AUDIO" : self == .lorenz ? "GEOMETRY" : (self == .render || self == .poseRender ? "RENDER" : (isOutput ? "OUTPUT" : (inputs.isEmpty ? "SOURCE" : "EFFECT"))) }
     public var isOutput: Bool { [.midiOut, .projector, .publishPalette, .window, .syphon, .ndi, .record, .recordAudio, .audioOutput].contains(self) }
-    public var outputType: PortType? { if self == .flashCells { return .field }; if self == .profileEncoder || self == .profileAnalog { return .rgbProfiles }; if isMIDINode && self != .midiOut { return .midi }; if self == .vectorShape || self == .vectorText || self == .fluidShape { return .vectorPath }; if self == .lightningPulses { return .trace }; if self == .glowFaces || self == .graphInkFlow || self == .graphParticles || self == .graphPulse || self == .graphClouds || self == .graphCloudParticles || self == .flashFaces || self == .surfaceGate || self == .videoCollection || self == .layerMux { return .collection }; if self == .palette || self == .videoPalette || self == .paletteAdjust { return .palette }; if self == .dotColors || self == .flipDots { return .dots }; if self == .dataStream || self == .blockerField || self == .streakField || self == .waterfallField || self == .cellularField || self == .streakGlow { return .field }; if self == .yoloPose { return .poses }; if self == .apc40 || self == .audioEnvelope || self == .lfo || self == .noise { return .control }; return self == .faceDetect ? .faces : isOutput ? nil : (isAudioNode ? .audio : (self == .lorenz ? .geometry : .video)) }
     public var isAudioNode: Bool { [.loopmother,.chromaEncoder,.audioInput,.voltageEncoder,.microphone,.audio,.audioGain,.audioMono,.audioMix,.audioPlugin,.audioFilter,.audioEQ,.audioOutput].contains(self) }
-    public var outputTypes: [PortType] { if self == .apc40 { return Array(repeating:.control,count:APC40.outputs.count) }; if self == .metroSequencer { return [.midi,.midi,.midi] }; if self == .chromaEncoder { return [.audio,.chromaReference,.audio,.audio] }; if self == .voltageEncoder { return [.audio,.drawRate,.audio,.audio] }; if isAudioNode && !isOutput { return [.audio,.audio,.audio] }; return self == .ab ? [.video,.collection] : self == .layerMux ? [.collection,.video] : self == .meshGradient ? [.video,.palette] : self == .video ? [.video,.audio,.audio,.audio] : outputType.map { [$0] } ?? [] }
-    public var outputs: [String] { if self == .apc40 { return APC40.outputs }; if self == .metroSequencer { return ["Track A","Track B","Both"] }; if self == .chromaEncoder { return ["Color Audio","Frame Reference","X / Left","Y / Right"] }; if isMIDINode && self != .midiOut { return ["MIDI"] }; if self == .vectorShape || self == .vectorText || self == .fluidShape { return ["Path"] }; if self == .voltageEncoder { return ["XY Audio", "Draw Rate", "X", "Y"] }; if self == .video { return ["Video","Stereo Audio","X / Left","Y / Right"] }; if isAudioNode && !isOutput { return ["Stereo / XY","X / Left","Y / Right"] }; if self == .layerMux { return ["Layers","Video"] }; return outputTypes.map { $0.rawValue.capitalized } }
     /// Separate audio outputs carry the chosen channel as mono in both slots.
     public func audioChannel(at output: Int) -> Int? {
         let first=(self == .voltageEncoder || self == .chromaEncoder || self == .video) ? 2:1
@@ -160,8 +146,7 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
         return inputTypes.firstIndex(of:type)
     }
     public var pausedStatus: String { isOutput ? "Disabled" : (bypassInput() == nil ? "Paused" : "Bypassed") }
-    public var inputTypes: [PortType] { if self == .flashCells { return [.palette] }; if self == .profileAnalog || self == .profileDecoder { return [.rgbProfiles] }; if self == .loopmother { return [.midi,.audio] }; if self == .chromaEncoder { return [.video] }; if self == .chromaDecoder { return [.audio,.chromaReference] }; if isMIDINode { return inputs.map { _ in .midi } }; if self == .voltageEncoder { return [.vectorPath] }; if self == .voltageVisualizer { return [.audio,.drawRate,.audio,.audio] }; if self == .voltageFluid { return [.audio,.drawRate,.audio,.audio,.video] }; if self == .videoPalette { return [.visual] }; if self == .ab { return [.visual,.visual] }; if self == .layerMux { return Array(repeating:.visual,count:8) }; if self == .lightningPulses { return [.palette,.control] }; if self == .glowFaces || self == .graphInkFlow || self == .graphParticles || self == .graphPulse || self == .graphClouds || self == .graphCloudParticles || self == .flashFaces || self == .meshGradient || self == .publishPalette || self == .paletteAdjust { return [.palette] }; if self == .projectionDots { return [.dots] }; if self == .ledMatrix { return [.video,.field,.field] }; if self == .poseRender { return [.poses] }; if self == .record { return [.video,.audio] }; if self == .recordAudio { return [.audio] }; if isAudioNode || self == .audioEnvelope { return inputs.map { _ in .audio } }; if self == .faceReplace { return [.video, .video, .faces, .faces] }; if self == .faceBoxes { return [.video, .faces] }; return inputs.map { _ in (self == .rasterSynth || self == .waveform || self == .audioVisualizer || self == .oscilloscope) ? .audio : (self == .render ? .geometry : .video) } }
-    public static var mediaPlaybackParameters: [ParameterSpec] { [.init("playing","Playing",0,1,1,choices:["Paused","Playing"]),.init("seek","Playhead (s)",0,86400,0)] }
+    public static var mediaPlaybackParameters: [ParameterSpec] { [.init("playing","Playing",0,1,1,choices:["Paused","Playing"]),.init("seek","Playhead (s)",0,86400,0,midi:false,unit:"s")] }
     public static var mediaTransformParameters: [ParameterSpec] { [
         .init("rotation", "Rotation", -180, 180, 0),
         .init("flipX", "Flip horizontal", 0, 1, 0, choices:["Off","On"]),
@@ -206,17 +191,17 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
         case .voltageFluid: return VoltageFluidStyle.fluidParameters
         case .oscilloscope: return AnalogVectorStyle.oscilloscopeParameters
         case .projector: return AnalogVectorStyle.projectorParameters
-        case .audioInput: return AudioChannels.parameters + AnalogVectorStyle.channelParameters + [.init("gain","Input gain (dB)",-24,36,0)]
-        case .microphone: return [.init("gain","Input gain (dB)",-24,36,0)]
-        case .audioEnvelope: return [.init("mode","Level",0,1,0,choices:["RMS","Peak"]),.init("gain","Sensitivity (dB)",-24,60,12),.init("floor","Floor (dB)",-90,-6,-60),.init("ceiling","Ceiling (dB)",-60,0,-6),.init("attack","Attack (ms)",1,1000,15),.init("release","Release (ms)",1,3000,200)]
-        case .audioGain: return AudioChannels.parameters + [.init("gain","Gain (dB)",-60,12,0),.init("pan","Pan",-1,1,0)]
-        case .audioMix: return [.init("gainA","A gain (dB)",-60,12,0),.init("gainB","B gain (dB)",-60,12,0),.init("master","Master (dB)",-60,6,-6)]
+        case .audioInput: return AudioChannels.parameters + AnalogVectorStyle.channelParameters + [.init("gain","Input gain (dB)",-24,36,0, unit:"dB")]
+        case .microphone: return [.init("gain","Input gain (dB)",-24,36,0, unit:"dB")]
+        case .audioEnvelope: return [.init("mode","Level",0,1,0,choices:["RMS","Peak"]),.init("gain","Sensitivity (dB)",-24,60,12, unit:"dB"),.init("floor","Floor (dB)",-90,-6,-60, unit:"dB"),.init("ceiling","Ceiling (dB)",-60,0,-6, unit:"dB"),.init("attack","Attack (ms)",1,1000,15, unit:"ms"),.init("release","Release (ms)",1,3000,200, unit:"ms")]
+        case .audioGain: return AudioChannels.parameters + [.init("gain","Gain (dB)",-60,12,0, unit:"dB"),.init("pan","Pan",-1,1,0)]
+        case .audioMix: return [.init("gainA","A gain (dB)",-60,12,0, unit:"dB"),.init("gainB","B gain (dB)",-60,12,0, unit:"dB"),.init("master","Master (dB)",-60,6,-6, unit:"dB")]
         case .audioEQ: return AudioEQStyle.parameters
-        case .audioFilter: return [.init("cutoff","Cutoff (Hz)",20,20000,2000),.init("mode","Filter",0,1,0,choices:["Low-pass","High-pass"]),.init("mix","Mix",0,1,1)]
-        case .audioOutput: return AudioChannels.parameters + AnalogVectorStyle.channelParameters + AnalogVectorStyle.outputRateParameters + [.init("gain","Volume (dB)",-60,6,0)]
-        case .audio: return AudioChannels.parameters + Self.mediaPlaybackParameters + [.init("speed","Speed",0.1,3,1),.init("start","Loop start (s)",0,86400,0),.init("end","Loop end (s, 0 = end)",0,86400,0)]
-        case .lfo: return [.init("rate","Rate (Hz)",0,20,0.2), .init("shape","Waveform",0,3,0,choices:["Sine","Triangle","Saw","Square"]), .init("phase","Phase",0,1,0), .init("width","Pulse width",0.01,0.99,0.5), .init("amplitude","Amplitude",0,1,1), .init("offset","Center",0,1,0.5)]
-        case .noise: return [.init("rate","Rate (Hz)",0,20,0.5), .init("style","Style",0,1,0,choices:["Smooth","Stepped"]), .init("seed","Seed",0,65535,1,step:1), .init("octaves","Octaves",1,6,1,step:1), .init("roughness","Roughness",0,1,0.5), .init("phase","Phase",0,1,0), .init("amplitude","Amplitude",0,1,1), .init("offset","Center",0,1,0.5)]
+        case .audioFilter: return [.init("cutoff","Cutoff (Hz)",20,20000,2000, unit:"Hz"),.init("mode","Filter",0,1,0,choices:["Low-pass","High-pass"]),.init("mix","Mix",0,1,1)]
+        case .audioOutput: return AudioChannels.parameters + AnalogVectorStyle.channelParameters + AnalogVectorStyle.outputRateParameters + [.init("gain","Volume (dB)",-60,6,0, unit:"dB")]
+        case .audio: return AudioChannels.parameters + Self.mediaPlaybackParameters + [.init("speed","Speed",0.1,3,1),.init("start","Loop start (s)",0,86400,0, unit:"s"),.init("end","Loop end (s, 0 = end)",0,86400,0)]
+        case .lfo: return [.init("rate","Rate (Hz)",0,20,0.2, unit:"Hz"), .init("shape","Waveform",0,3,0,choices:["Sine","Triangle","Saw","Square"]), .init("phase","Phase",0,1,0), .init("width","Pulse width",0.01,0.99,0.5), .init("amplitude","Amplitude",0,1,1), .init("offset","Center",0,1,0.5)]
+        case .noise: return [.init("rate","Rate (Hz)",0,20,0.5, unit:"Hz"), .init("style","Style",0,1,0,choices:["Smooth","Stepped"]), .init("seed","Seed",0,65535,1,step:1), .init("octaves","Octaves",1,6,1,step:1), .init("roughness","Roughness",0,1,0.5), .init("phase","Phase",0,1,0), .init("amplitude","Amplitude",0,1,1), .init("offset","Center",0,1,0.5)]
         case .faceReplace: return [.init("mix", "Mix", 0, 1, 1), .init("scale", "Face scale", 0.25, 4, 1), .init("feather", "Edge softness", 0.01, 0.5, 0.18), .init("faceA", "Face A (largest = 0)", 0, 31, 0,step:1), .init("faceB", "Face B (largest = 0)", 0, 31, 0,step:1)]
         case .yoloPose: return [.init("rate", "Detection FPS", 1, 60, 30), .init("confidence", "Person confidence", 0.05, 0.95, 0.3), .init("iou", "Overlap threshold", 0.1, 0.9, 0.45)]
         case .poseRender: return PoseStyle.parameters
@@ -232,9 +217,9 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
             .init("noise", "Noise", 0, 100, 0), .init("denoise", "Denoise", 0, 100, 0), .init("blur", "Blur", 0, 30, 0),
             .init("brightness", "Brightness", -100, 100, 0), .init("contrast", "Contrast", -100, 100, 0), .init("gamma", "Gamma", 0.25, 3, 1),
             .init("tonal", "Tonal mapping", 0, 4, 0, choices:["RGB","Monochrome","1 Color","2 Colors","3 Colors"]),
-            .init("highlightColor", "Highlights", 0, 16777215, 16777215), .init("midtoneColor", "Midtones", 0, 16777215, 3900592), .init("shadowColor", "Shadows", 0, 16777215, 0),
+            .init("highlightColor", "Highlights", 0, 16777215, 16777215, midi:false, step:1, unit:"sRGB24"), .init("midtoneColor", "Midtones", 0, 16777215, 3900592, midi:false, step:1, unit:"sRGB24"), .init("shadowColor", "Shadows", 0, 16777215, 0, midi:false, step:1, unit:"sRGB24"),
             .init("highlightLevel", "Highlight level", 0.51, 1, 1), .init("midtoneLevel", "Midtone position", 0.05, 0.95, 0.5), .init("shadowLevel", "Shadow level", 0, 0.49, 0),
-            .init("background", "Background", 0, 3, 0, choices:["Black","White","Custom","Source"]), .init("backgroundColor", "Background color", 0, 16777215, 0),
+            .init("background", "Background", 0, 3, 0, choices:["Black","White","Custom","Source"]), .init("backgroundColor", "Background color", 0, 16777215, 0, midi:false, step:1, unit:"sRGB24"),
             .init("angle", "Pattern angle", -180, 180, 0), .init("seed", "Noise seed", 0, 65535, 0,step:1), .init("mix", "Mix", 0, 1, 1),
             .init("matrix", "Legacy matrix", 0, 2, 2, choices:["2×2","4×4","8×8"]), .init("mono", "Legacy monochrome", 0, 1, 0, choices:["Off","On"])
         ]
@@ -245,10 +230,10 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
         case .text: return [.init("size", "Font size", 8, 300, 96), .init("x", "Horizontal", 0, 1, 0.5), .init("y", "Vertical", 0, 1, 0.5), .init("hue", "Hue", 0, 1, 0), .init("saturation", "Saturation", 0, 1, 0)]
         case .audioVisualizer: return [
             .init("mode","View",0,5,1,choices:["Waveform","Spectrum","Spectrogram","Radial","Bars","Ridgelines"]),
-            .init("gain","Gain (dB)",-24,36,0), .init("floor","Floor (dBFS)",-100,-20,-72),
+            .init("gain","Gain (dB)",-24,36,0, unit:"dB"), .init("floor","Floor (dBFS)",-100,-20,-72),
             .init("logFrequency","Frequency scale",0,1,1,choices:["Linear","Logarithmic"]),
-            .init("window","Waveform window (ms)",10,170,80), .init("history","History (s)",1,20,6),
-            .init("smoothing","Decay (s)",0,1,0.15), .init("thickness","Line width (px)",1,12,3),
+            .init("window","Waveform window (ms)",10,170,80, unit:"ms"), .init("history","History (s)",1,20,6, unit:"s"),
+            .init("smoothing","Decay (s)",0,1,0.15, unit:"s"), .init("thickness","Line width (px)",1,12,3, unit:"px"),
             .init("fill","Spectrum style",0,1,1,choices:["Line","Filled"]),
             .init("axes","Axes",0,1,1,choices:["Off","On"]), .init("grid","Grid",0,1,0,choices:["Off","On"]),
             .init("bars","Bar count",8,128,48,step:1), .init("ridges","Ridge lines",8,64,28,step:1)
@@ -259,14 +244,14 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
         case .shaderEffect: return [.init("speed","Speed",0,3,1), .init("mix","Mix",0,1,1), .init("p1","Control 1",-10,10,0), .init("p2","Control 2",-10,10,0), .init("p3","Control 3",-10,10,0), .init("p4","Control 4",-10,10,0)]
         case .shader: return [.init("speed", "Speed", 0, 3, 1)]
         case .powerGlitch: return PowerGlitchStyle.parameters
-        case .liveStream: return [.init("buffer","Buffer (s)",0,8,2,midi:false,step:0.25)] + Self.mediaTransformParameters
+        case .liveStream: return [.init("buffer","Buffer (s)",0,8,2,midi:false,step:0.25, unit:"s")] + Self.mediaTransformParameters
         case .lightningPulses: return TraceStyle.parameters
         case .videoPalette: return PaletteStyle.extractionParameters
         case .paletteAdjust: return PaletteAdjustmentStyle.parameters
         case .meshGradient: return MeshGradientStyle.parameters
         case .pattern: return [.init("style", "Pattern", 0, 2, 0, choices: ["Gradient", "Color bars", "Grid"]), .init("speed", "Motion", 0, 2, 0.25)]
         case .image: return Self.mediaTransformParameters
-        case .video: return Self.mediaPlaybackParameters + [.init("speed", "Speed", 0.1, 3, 1), .init("start", "Loop start (s)", 0, 86400, 0), .init("end", "Loop end (s, 0 = end)", 0, 86400, 0)] + Self.mediaTransformParameters
+        case .video: return Self.mediaPlaybackParameters + [.init("speed", "Speed", 0.1, 3, 1), .init("start", "Loop start (s)", 0, 86400, 0, unit:"s"), .init("end", "Loop end (s, 0 = end)", 0, 86400, 0)] + Self.mediaTransformParameters
         case .crt: return [.init("scanlines", "Scanlines", 0, 1, 0.4), .init("curvature", "Curvature", 0, 1, 0.18), .init("aberration", "RGB offset", 0, 10, 2), .init("glow", "Glow", 0, 1, 0.3), .init("vignette", "Vignette", 0, 1, 0.35), .init("noise", "Noise", 0, 0.2, 0.025)]
         case .layerMux: return (1...8).map { ParameterSpec("level\($0)","Layer \($0)",0,1,$0 == 1 ? 1 : 0) } + (1...8).map { ParameterSpec("mode\($0)","Video \($0) mode",0,1,0,choices:["Mix","Mask"],midi:true,step:1) } + [.init("channels","Channels",1,8,8,midi:false,step:1),.init("followAPC","Follow APC",0,1,0,choices:["Off","On"],midi:false)]
         case .mux: return (1...8).map { ParameterSpec("level\($0)","Channel \($0)",0,1,$0 == 1 ? 1 : 0) } + (1...8).map { ParameterSpec("mode\($0)","Channel \($0) mode",0,1,0,choices:["Mix","Mask"],midi:true,step:1) } + [.init("channels","Channels",1,8,8,midi:false,step:1),.init("followAPC","Follow APC",0,1,0,choices:["Off","On"],midi:false)]
@@ -275,6 +260,8 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
         case .projectionDots: return ProjectionDotsStyle.parameters
         case .dotColors: return DotColorsStyle.parameters
         case .flipDots: return FlipDotsStyle.parameters
+        case .fieldRender: return []
+        case .fieldMix: return [.init("mix","Mix",0,1,0.5)]
         case .flashCells: return FlashCellsStyle.parameters
         case .palette: return PaletteGenerator.parameters
         case .ledMatrix: return LEDMatrixStyle.parameters
@@ -294,18 +281,9 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
         }
     }
 }
-extension NodeKind {
-    // Retired kinds load as their surviving equivalent.
-    public init(from decoder: Decoder) throws {
-        let raw = try decoder.singleValueContainer().decode(String.self)
-        guard let kind = NodeKind(rawValue: raw == "graphInkFlow2" ? "graphInkFlow" : raw == "lightField" ? "streakGlow" : raw) else {
-            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unknown node kind \(raw)"))
-        }
-        self = kind
-    }
-}
 public struct Position: Codable, Equatable, Sendable { public var x: Double; public var y: Double; public init(_ x: Double, _ y: Double) { self.x = x; self.y = y } }
 public struct Node: Codable, Identifiable, Equatable, Sendable {
+    public var fieldParameters: [ParameterSpec]?
     public var id: UUID
     public var kind: NodeKind
     public var name: String
@@ -329,7 +307,7 @@ public struct Node: Codable, Identifiable, Equatable, Sendable {
         palette = kind == .palette ? PaletteStyle.defaultPalette : nil
         parameters = Dictionary(uniqueKeysWithValues: kind.parameters.map { ($0.key, $0.initial) }); enabled = true
     }
-    public var channelCount: Int { (kind == .mux || kind == .layerMux) ? max(1,min(8,Int(value("channels").rounded()))) : kind.inputs.count }
+    public var channelCount: Int { (kind == .mux || kind == .layerMux) ? max(1,min(8,Int(max(1,min(8,value("channels"))).rounded()))) : kind.inputs.count }
     public var inputs: [String] { Array(kind.inputs.prefix(channelCount)) }
     public var inputTypes: [PortType] { Array(kind.inputTypes.prefix(channelCount)) }
     public var portRows: Int { max(inputs.count,kind.outputTypes.count) }
@@ -341,8 +319,11 @@ public struct Edge: Codable, Identifiable, Equatable, Sendable {
     public var id: UUID
     public var source: UUID
     public var target: UUID
-    public var input: Int
+    public var input: Int = 0
     public var output: Int?
+    public var inputID: String?
+    public var outputID: String?
+    private enum CodingKeys: String, CodingKey { case id, source, target, inputID, outputID }
     public var outputIndex: Int { output ?? 0 }
     public init(source: UUID, target: UUID, input: Int = 0, output: Int = 0) { id = UUID(); self.source = source; self.target = target; self.input = input; self.output = output == 0 ? nil : output }
 }
@@ -352,7 +333,8 @@ public struct GraphError: LocalizedError, Sendable {
     public var errorDescription: String? { message }
 }
 public struct Graph: Codable, Equatable, Sendable {
-    public var version = 1
+    public static let currentVersion = 2
+    public var version = Self.currentVersion
     public var nodes: [Node] = []
     public var edges: [Edge] = []
     public var components: [Component]?
@@ -364,10 +346,19 @@ public struct Graph: Codable, Equatable, Sendable {
     public func node(_ id: UUID) -> Node? { nodes.first { $0.id == id } }
     public mutating func connect(_ source: UUID, to target: UUID, input: Int = 0, output: Int = 0) throws {
         var next = self
-        guard let from = node(source), let into = node(target), into.inputs.indices.contains(input), let type = from.kind.outputType(at:output), into.inputTypes[input].accepts(type) else { throw GraphError("Connect compatible types. Layer inputs accept video or collection effects; other inputs require their declared type.") }
+        guard let from = node(source),let into = node(target) else { throw GraphError("Missing cable endpoint.") }
+        let outputs = from.ports(output:true), inputs = into.ports(output:false)
+        guard outputs.indices.contains(output), inputs.indices.contains(input) else { throw GraphError("Unknown socket on \(from.name) or \(into.name).") }
+        let outlet = outputs[output], inlet = inputs[input]
+        guard inlet.type.accepts(outlet.type) else {
+            throw GraphError("\(into.name) · \(inlet.name) expects \(inlet.type.rawValue). \(from.name) · \(outlet.name) supplies \(outlet.type.rawValue).")
+        }
         guard source != target else { throw GraphError("A node cannot connect to itself.") }
         next.edges.removeAll { $0.target == target && $0.input == input }
-        next.edges.append(Edge(source: source, target: target, input: input, output: output))
+        var edge = Edge(source: source, target: target, input: input, output: output)
+        edge.inputID = inlet.id
+        edge.outputID = outlet.id
+        next.edges.append(edge)
         _ = try next.orderedNodes()
         self = next
     }
@@ -392,7 +383,16 @@ public struct Graph: Codable, Equatable, Sendable {
         let boundary = edges.filter { removing.contains($0.source) && !removing.contains($0.target) }
         for i in nodes.indices { nodes[i].modulations = nodes[i].modulations?.filter { !removing.contains($0.value.source) } }
         nodes.removeAll { removing.contains($0.id) }; edges.removeAll { removing.contains($0.source) || removing.contains($0.target) }
-        if components != nil { components = groups.compactMap { old in var g = old; g.members.removeAll { removing.contains($0) }; return g.members.isEmpty ? nil : g } }
+        if components != nil {
+            components = groups.compactMap { old in
+                var group = old
+                group.members.removeAll(where:removing.contains)
+                group.interface?.ports.removeAll { removing.contains($0.node) }
+                group.interface?.parameters.removeAll { removing.contains($0.node) }
+                if let preview = group.interface?.preview, removing.contains(preview) { group.interface?.preview = nil }
+                return group.members.isEmpty ? nil : group
+            }
+        }
         for edge in boundary {
             let candidates = upstream(Endpoint(node:edge.source,output:edge.outputIndex),[])
             if candidates.count == 1, let source = candidates.first {
@@ -412,15 +412,15 @@ public struct Graph: Codable, Equatable, Sendable {
     public mutating func setParameter(_ id: UUID, key: String, value: Double) throws {
         guard let i = nodes.firstIndex(where: { $0.id == id }), let spec = nodes[i].parameterDefinitions.first(where: { $0.key == key }) else { throw GraphError("Unknown node or parameter: \(key)") }
         guard value.isFinite, value >= spec.min, value <= spec.max, spec.choices == nil || value.rounded() == value else { throw GraphError("\(key) must be between \(spec.min) and \(spec.max)\(spec.choices == nil ? "" : " and an integer").") }
-        if key == "channels" {
+        if key == "channels", [.mux,.layerMux].contains(nodes[i].kind) {
             guard value.rounded() == value else { throw GraphError("Channel count must be a whole number") }
             guard !edges.contains(where:{ $0.target == id && $0.input >= Int(value) }),
                   !(nodes[i].modulations ?? [:]).keys.contains(where:{ $0.hasPrefix("level") && (Int($0.dropFirst(5)) ?? 0) > Int(value) }) else {
                 throw GraphError("Disconnect inputs and level controls above channel \(Int(value)) before reducing the channel count.")
             }
         }
-        nodes[i].parameters[key] = value
-        if key == "seek" { nodes[i].seekRevision = UUID() }
+        nodes[i].parameters[key] = spec.quantized(value)
+        if key == "seek", [.audio,.video].contains(nodes[i].kind) { nodes[i].seekRevision = UUID() }
     }
     public func orderedNodes() throws -> [Node] {
         var result: [Node] = [], visiting: Set<UUID> = [], visited: Set<UUID> = []
@@ -437,65 +437,16 @@ public struct Graph: Codable, Equatable, Sendable {
         for node in nodes { try visit(node.id) }
         return result
     }
+    public static func read(_ data: Data) throws -> Self {
+        struct Header: Decodable { let version: Int }
+        let version = try JSONDecoder().decode(Header.self, from: data).version
+        guard version == currentVersion else { throw GraphError("Unsupported project version \(version). Run patch-migrate on older projects.") }
+        return try ProjectCoding.decode(Self.self, from: data).validated()
+    }
     public func validated() throws -> Graph {
-        // Removed visualizer options must not prevent existing projects from opening.
-        let removedVisualizerKeys = ["appearance", "previewMode", "autoFit", "fitScale"]
-        if nodes.contains(where:{ node in node.kind == .voltageVisualizer && removedVisualizerKeys.contains(where: { node.parameters[$0] != nil }) }) {
-            var migrated=self
-            for i in migrated.nodes.indices where migrated.nodes[i].kind == .voltageVisualizer {
-                for key in removedVisualizerKeys { migrated.nodes[i].parameters.removeValue(forKey:key) }
-            }
-            return try migrated.validated()
-        }
-        // Move old encoder rate choices to their hardware sinks, once per document.
-        if nodes.contains(where:{ $0.kind == .voltageEncoder && $0.parameters["sampleRate"] != nil }) {
-            var migrated=self, requested: [UUID:Double]=[:]
-            for encoder in nodes where encoder.kind == .voltageEncoder {
-                guard let old=encoder.parameters["sampleRate"],old.isFinite,old>=0,old<=2,old.rounded()==old else { continue }
-                var pending=[encoder.id],seen=Set<UUID>()
-                while let id=pending.popLast() {
-                    guard seen.insert(id).inserted else { continue }
-                    if let sink=node(id),sink.kind == .audioOutput,sink.parameters["sampleRate"] == nil { requested[id]=max(requested[id] ?? 0,old+1) }
-                    pending += edges.filter { $0.source == id && node(id)?.kind.outputType(at:$0.outputIndex) == .audio }.map(\.target).filter { !seen.contains($0) }
-                }
-            }
-            for i in migrated.nodes.indices {
-                if migrated.nodes[i].kind == .voltageEncoder { migrated.nodes[i].parameters.removeValue(forKey:"sampleRate") }
-                if let rate=requested[migrated.nodes[i].id] { migrated.nodes[i].parameters["sampleRate"]=rate }
-            }
-            return try migrated.validated()
-        }
-        if PosterStyle.needsMigration(self) { return try PosterStyle.migrate(self).validated() }
-        // Old Projection Dots documents retain their paper size and color settings.
-        // Remove redundant geometry controls before normal schema validation.
-        if nodes.contains(where: { $0.kind == .projectionDots && !ProjectionDotsStyle.legacyKeys.isDisjoint(with: $0.parameters.keys) }) {
-            var migrated = self
-            migrated.nodes = nodes.map { $0.kind == .projectionDots ? ProjectionDotsStyle.migrate($0) : $0 }
-            return try migrated.validated()
-        }
-        let colorKeys = Set(DotColorsStyle.parameters.map(\.key))
-        let legacyDots = nodes.filter { $0.kind == .projectionDots && !colorKeys.isDisjoint(with:$0.parameters.keys) }
-        if !legacyDots.isEmpty {
-            var migrated = self
-            for old in legacyDots {
-                guard let index = migrated.nodes.firstIndex(where: { $0.id == old.id }) else { continue }
-                if !migrated.edges.contains(where: { $0.target == old.id && $0.input == 0 }) {
-                    var colors = Node(kind:.dotColors,position:.init(old.position.x-290,old.position.y))
-                    for key in colorKeys { if let value = old.parameters[key] { colors.parameters[key] = value } }
-                    colors.modulations = old.modulations?.filter { colorKeys.contains($0.key) }
-                    migrated.nodes.append(colors)
-                    migrated.edges.append(Edge(source:colors.id,target:old.id))
-                }
-                migrated.nodes[index].parameters = old.parameters.filter { !colorKeys.contains($0.key) }
-                migrated.nodes[index].modulations = old.modulations?.filter { !colorKeys.contains($0.key) }
-                // The old source contains the combined color/geometry shader. Its file is preserved on disk.
-                migrated.nodes[index].file = nil
-            }
-            return try migrated.validated()
-        }
+        guard version == Self.currentVersion else { throw GraphError("Unsupported project version \(version).") }
         guard nodes.filter({ $0.kind == .apc40 }).count <= 1 else { throw GraphError("Only one APC40 node is allowed in a patch.") }
         try validateMIDIMappings()
-        guard version == 1 else { throw GraphError("Unsupported project version.") }
         guard (64...3840).contains(width), (64...2160).contains(height), (1...120).contains(fps) else { throw GraphError("Invalid render size or frame rate.") }
         guard nodes.count <= 200, Set(nodes.map(\.id)).count == nodes.count, Set(edges.map(\.id)).count == edges.count else { throw GraphError("Duplicate IDs or too many nodes (maximum 200).") }
         var grouped: Set<UUID> = [], groupIDs = Set<UUID>()
@@ -503,14 +454,48 @@ public struct Graph: Codable, Equatable, Sendable {
             guard groupIDs.insert(group.id).inserted, node(group.id) == nil, !group.members.isEmpty, group.name.count <= 128, group.position.x.isFinite, group.position.y.isFinite, abs(group.position.x)<1e6, abs(group.position.y)<1e6 else { throw GraphError("Invalid component") }
             for id in group.members { guard node(id) != nil, grouped.insert(id).inserted else { throw GraphError("Missing or duplicate component member") } }
         }
+        var resolved = self
+        func resolve(_ key: String?, ports: [PortSpec]) throws -> PortSpec {
+            guard let key else { throw GraphError("A named port ID is required.") }
+            guard let port = ports.first(where: { $0.id == key }) else { throw GraphError("Missing port ‘\(key)’.") }
+            return port
+        }
+        for i in edges.indices {
+            let edge = edges[i]
+            guard let source = node(edge.source), let target = node(edge.target) else { throw GraphError("Missing cable endpoint.") }
+            let input = try resolve(edge.inputID,ports:target.ports(output:false))
+            let output = try resolve(edge.outputID,ports:source.ports(output:true))
+            resolved.edges[i].input = input.index
+            resolved.edges[i].output = output.index == 0 ? nil : output.index
+            resolved.edges[i].inputID = input.id
+            resolved.edges[i].outputID = output.id
+        }
+        for i in nodes.indices {
+            for (key,binding) in nodes[i].modulations ?? [:] {
+                guard let source = node(binding.source) else { throw GraphError("Missing modulation source.") }
+                let port = try resolve(binding.outputID,ports:source.ports(output:true))
+                if binding.outputID != port.id || binding.outputIndex != port.index {
+                    var revised = binding
+                    revised.output = port.index == 0 ? nil : port.index
+                    revised.outputID = port.id
+                    resolved.nodes[i].modulations?[key] = revised
+                }
+            }
+        }
+        if resolved.edges != edges || resolved.nodes != nodes { return try resolved.validated() }
+        for group in groups { try validateInterface(group) }
         var occupied: Set<String> = []
         for edge in edges {
             guard let from = node(edge.source), let to = node(edge.target), to.inputs.indices.contains(edge.input), to.inputTypes[edge.input].accepts(from.kind.outputType(at:edge.outputIndex)) else { throw GraphError("Invalid cable.") }
             guard occupied.insert("\(edge.target):\(edge.input)").inserted else { throw GraphError("An input can have only one cable.") }
         }
         for n in nodes {
+            if let parameters = n.fieldParameters {
+                guard n.kind == .fieldShader else { throw GraphError("Custom field parameters require a Field Shader") }
+                try ParameterSpec.validateShaderParameters(parameters)
+            }
             for (key, publication) in n.publications ?? [:] {
-                guard let port=Int(key), n.publishableTypes.indices.contains(port), [.video,.palette,.control,.collection,.trace].contains(n.publishableTypes[port]), ["auto","on","off"].contains(publication.mode), (publication.name?.count ?? 0)<=128 else { throw GraphError("Invalid publication") }
+                guard let port=n.publishablePortIDs.firstIndex(of:key), n.publishableTypes.indices.contains(port), [.video,.palette,.control,.collection,.trace].contains(n.publishableTypes[port]), ["auto","on","off"].contains(publication.mode), (publication.name?.count ?? 0)<=128 else { throw GraphError("Invalid publication") }
             }
             if let palette = n.palette {
                 guard n.kind == .palette, (1...256).contains(palette.colors.count), palette.colors.allSatisfy(\.isValid) else { throw GraphError("Invalid palette colors") }

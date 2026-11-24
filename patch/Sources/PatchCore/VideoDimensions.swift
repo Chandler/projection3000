@@ -14,6 +14,7 @@ extension Graph {
         func resolve(_ id: UUID?) -> VideoDimensions {
             let canvas = VideoDimensions(width,height)
             guard let id, visited.insert(id).inserted, let node = node(id) else { return canvas }
+            if node.kind.outputType == .field || node.kind == .fieldRender { return canvas }
             if node.kind == .rasterSynth || node.kind == .layerMux || node.kind == .voltageVisualizer || node.kind == .voltageFluid || node.kind == .oscilloscope || node.kind == .projector { return canvas }
             if node.kind.outputType == .collection || node.kind.outputType == .trace { return VideoDimensions(640,360) }
             if node.kind.previewKind == .palette { return VideoDimensions(640,160) }

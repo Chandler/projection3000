@@ -49,10 +49,10 @@ extension ControlAPI {
              "file":entry.file?.path as Any? ?? NSNull(),
              "controlStyle":entry.controlStyle as Any? ?? NSNull(),
              "controls":try JSONSerialization.jsonObject(with:JSONEncoder().encode(entry.controlStyle == "blinds" ? BlindsControls.specs : [])),
-             "inputs":entry.kind.inputs.enumerated().map { ["index":$0.offset,"name":$0.element,"type":entry.kind.inputTypes[$0.offset].rawValue] },
-             "outputs":entry.kind.outputs.enumerated().map { ["index":$0.offset,"name":$0.element,"type":entry.kind.outputTypes[$0.offset].rawValue] },
+             "inputs":try JSONSerialization.jsonObject(with:JSONEncoder().encode(entry.kind.ports(output:false))),
+             "outputs":try JSONSerialization.jsonObject(with:JSONEncoder().encode(entry.kind.ports(output:true))),
              "parameters":try JSONSerialization.jsonObject(with:JSONEncoder().encode(entry.parameterSpecs))]
-        },"graphRevision":revision(),"refresh":"POST /v1/commands {op: library_refresh}"]
+        },"libraryIssues":UserNodeLibrary.shared.diagnostics,"graphRevision":revision(),"refresh":"POST /v1/commands {op: library_refresh}"]
     }
     func newJob() throws -> LiveJob {
         guard jobs.values.filter({ ["queued","compiling","refreshing"].contains($0.state) }).count < 4 else { throw GraphError("Compile queue full; wait for a running job.") }
@@ -63,14 +63,21 @@ extension ControlAPI {
         guard let source = body["source"] as? String, !source.isEmpty, source.utf8.count <= 131072,
               let name = body["name"] as? String, !name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty, name.count <= 100,
               let raw = body["kind"] as? String, let kind = NodeKind(rawValue:raw),
-              [.meshGradient,.dotColors,.flipDots,.projectionDots,.shader,.shaderEffect,.scene].contains(kind) || kind.outputType == .field else {
+              [.meshGradient,.dotColors,.flipDots,.projectionDots,.shader,.shaderEffect,.scene,.fieldShader,.cellularField,.waterfallField,.streakField,.blockerField,.dataStream].contains(kind) else {
             throw GraphError("Expected name (1–100 characters), kind (meshGradient, dotColors, flipDots, projectionDots, shader, shaderEffect, scene or a field kind), and source (up to 128 KiB).")
         }
+        var fieldParameters: [ParameterSpec]?
+        if let declaration = body["parameters"] {
+            guard kind == .fieldShader else { throw GraphError("Custom parameters require kind fieldShader") }
+            fieldParameters = try JSONDecoder().decode([ParameterSpec].self,from:JSONSerialization.data(withJSONObject:declaration))
+            try ParameterSpec.validateShaderParameters(fieldParameters ?? [])
+        }
+        let declaredParameters = fieldParameters
         let controlStyle = body["controlStyle"] as? String
         if body["controlStyle"] != nil && !(controlStyle == "metallicPool" && kind == .scene) && (!["blinds","liquidMetal","liquidChrome","ferrofluid"].contains(controlStyle ?? "") || kind != .shaderEffect) { throw GraphError("Supported controlStyle: blinds, liquidMetal, liquidChrome or ferrofluid for shaderEffect") }
         let parameterTitles = body["parameterTitles"] as? [String:String] ?? [:]
         if body["parameterTitles"] != nil {
-            let keys = Set((controlStyle == "metallicPool" ? MetallicPoolStyle.parameters : controlStyle == "liquidMetal" ? LiquidMetalStyle.parameters : controlStyle == "liquidChrome" ? LiquidChromeStyle.parameters : controlStyle == "ferrofluid" ? FerrofluidStyle.parameters : controlStyle == "blinds" ? BlindsStyle.parameters : kind.parameters).map(\.key))
+            let keys = Set((declaredParameters ?? (controlStyle == "metallicPool" ? MetallicPoolStyle.parameters : controlStyle == "liquidMetal" ? LiquidMetalStyle.parameters : controlStyle == "liquidChrome" ? LiquidChromeStyle.parameters : controlStyle == "ferrofluid" ? FerrofluidStyle.parameters : controlStyle == "blinds" ? BlindsStyle.parameters : kind.parameters)).map(\.key))
             guard body["parameterTitles"] is [String:String], parameterTitles.allSatisfy({ keys.contains($0.key) && !$0.value.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty && $0.value.count <= 100 }) else {
                 throw GraphError("parameterTitles must map parameter keys to nonempty names (up to 100 characters).")
             }
@@ -88,6 +95,7 @@ extension ControlAPI {
                 do {
                     try source.write(to:staging.appendingPathComponent("effect.metal"),atomically:true,encoding:.utf8)
                     var metadata: [String:Any] = ["name":name,"kind":kind.rawValue,"file":"effect.metal","parameterTitles":parameterTitles]
+                    if let declaredParameters { metadata["parameters"] = try JSONSerialization.jsonObject(with:JSONEncoder().encode(declaredParameters)) }
                     if let controlStyle { metadata["controlStyle"] = controlStyle }
                     try JSONSerialization.data(withJSONObject:metadata,options:[.sortedKeys]).write(to:staging.appendingPathComponent("effect.json"),options:.atomic)
                     try FileManager.default.setAttributes([.posixPermissions:0o444],ofItemAtPath:staging.appendingPathComponent("effect.metal").path)

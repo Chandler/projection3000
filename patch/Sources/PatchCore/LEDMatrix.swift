@@ -113,6 +113,8 @@ public enum WaterfallFieldStyle {
 
 public enum CellularFieldStyle {
     public static var parameters: [ParameterSpec] { [
+        .init("gridColumns","Grid columns (0 = Auto)",0,320,0,midi:false,step:1),
+        .init("gridRows","Grid rows (0 = Auto)",0,4096,0,midi:false,step:1),
         .init("rule","Rule",0,4,3,choices:["Life","HighLife","Seeds","Brian’s Brain","Cyclic waves"],midi:true,step:1),
         .init("rate","Generations / s",0,60,12),
         .init("density","Starting density (%)",0,100,18),

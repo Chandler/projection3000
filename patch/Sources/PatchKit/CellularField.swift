@@ -4,8 +4,6 @@ import PatchCore
 
 /// Two small textures, one texel per LED. No CPU readback or full-size simulation.
 final class CellularGrid {
-    let fieldID: UUID
-    let consumerID: UUID
     private var textures: [MTLTexture] = []
     private var active = 0
     private var resetValues: [Double] = []
@@ -14,7 +12,6 @@ final class CellularGrid {
     private var generation: UInt32 = 0
     private var ready = false
     var status = ""
-    init(fieldID: UUID,consumerID: UUID) { self.fieldID=fieldID; self.consumerID=consumerID }
     func encode(_ command: MTLCommandBuffer,device: MTLDevice,pipeline: MTLComputePipelineState,node: Node,columns: Int,rows: Int,time: Double) -> MTLTexture? {
         guard columns>0,rows>0,columns<=320,rows<=4096 else { status="Automata grid exceeds 320 × 4096"; return nil }
         if textures.first?.width != columns || textures.first?.height != rows {
@@ -48,12 +45,25 @@ final class CellularGrid {
 }
 
 extension Renderer {
-    func cellularTexture(_ field: Node,consumer: UUID,slot: Int,columns: Int,rows: Int,command: MTLCommandBuffer) -> (MTLTexture?,String) {
+    func cellularDomain(_ node: Node,display: Node?,displaySize: VideoDimensions?,project: VideoDimensions) -> VideoDimensions {
+        let explicitWidth = Int(node.value("gridColumns").rounded())
+        let explicitHeight = Int(node.value("gridRows").rounded())
+        let columns = explicitWidth > 0 ? explicitWidth : display.map { Int($0.value("columns").rounded()) } ?? min(320,project.width)
+        let rows: Int
+        if explicitHeight > 0 { rows = explicitHeight }
+        else if explicitWidth == 0, let display, display.value("grid") >= 0.5 { rows = Int(display.value("rows").rounded()) }
+        else {
+            let aspect = (explicitWidth == 0 ? displaySize : nil)?.aspect ?? project.aspect
+            rows = max(1,min(4096,Int((Double(columns)/aspect).rounded())))
+        }
+        return VideoDimensions(columns,rows)
+    }
+    func cellularTexture(_ field: Node,columns: Int,rows: Int,command: MTLCommandBuffer) -> (MTLTexture?,String) {
         let resource=shader(field)
         guard let pipeline=resource?.pipeline else { return (nil,resource?.error ?? "Compiling cellular automata…") }
-        let key="\(consumer):\(slot):\(field.id)"
-        if cellularGrids[key]==nil { cellularGrids[key]=CellularGrid(fieldID:field.id,consumerID:consumer) }
-        let grid=cellularGrids[key]!
+        let grid: CellularGrid
+        if let existing = cellularGrids[field.id] { grid = existing }
+        else { grid = CellularGrid(); cellularGrids[field.id] = grid }
         let texture=grid.encode(command,device:device,pipeline:pipeline,node:field,columns:columns,rows:rows,time:renderTime)
         return (texture,resource?.error ?? grid.status)
     }

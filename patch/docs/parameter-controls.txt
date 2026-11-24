@@ -1,5 +1,4 @@
-PATCH PARAMETER CONTROLS — live performance style guide
-2026-11-14
+PATCH PARAMETER CONTROLS
 
 Choose controls by meaning and likely action. Continuous values should be
 adjustable by dragging; typing is secondary. Preserve exact numeric entry.
@@ -50,10 +49,11 @@ custom scalar inspectors. Existing numeric fields retained. Noise octave/seed
 and Face Replace index metadata corrected. No persisted key or value changes.
 
 AUDIT / FOLLOW-UP
-The metadata currently has bounds/default/choices/step/MIDI eligibility, but no
-explicit quantity, unit, neutral, response curve or contextual color model.
-This pass uses established keys/titles for presentation. Future custom shaders
-should declare semantics instead of relying on fallback Control 1–4 names.
+ParameterSpec declares a stable key, title, bounds, default, choices, increment,
+MIDI eligibility and optional unit. The API reports the resulting valueKind.
+A field shader saves its ordered ParameterSpec declarations with the node.
+Inspectors still use selected keys and titles for neutral landmarks, colors
+and logarithmic slider travel.
 Further work: shared curve metadata for MIDI; palette-aware before/after hue
 swatches; contextual saturation in every inspector; opacity checkerboards;
 cyclic wrap gestures; duration-relative loop handles; consistent reset on
@@ -62,7 +62,6 @@ Trace's manually logarithmic control remains unchanged to avoid applying the
 curve twice. LED matrix's existing ticked row/column sliders are retained.
 Pose's dedicated color surface remains the reference for contextual colors.
 
-COMPATIBILITY
-Existing patches retain keys, values, defaults and ranges. Adding step metadata
-changes how new edits are made; it does not rewrite saved graphs. No migration
-is needed. User-authored project files are not rewritten by this work.
+PERSISTENCE
+Patch uses graph version 2. Parameter values are keyed by parameter ID.
+A saved modulation binding identifies its source node and named output port.

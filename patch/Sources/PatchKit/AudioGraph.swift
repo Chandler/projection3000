@@ -169,6 +169,16 @@ final class AudioGraphEngine {
     }
     private var processingRates: [UUID:Double] = [:]
     private var outputRequests: [UUID:Double] = [:]
+    private struct PathSignal {
+        let path: VectorPath
+        let rotation: Double
+        let angularVelocity: Double
+    }
+    private struct FrameReference {
+        let format: ChromaFormat
+        let level: Double
+    }
+    private var routing = SignalRouting()
     private var vectorPaths: [UUID:(VectorPath.Signature,VectorPath)] = [:]
     private var vectorPhases: [UUID:Double] = [:]
     private var vectorSources = Set<UUID>()
@@ -270,8 +280,17 @@ final class AudioGraphEngine {
                 self.chromaTransmitters=self.chromaTransmitters.filter { graph.node($0.key)?.kind == .chromaEncoder }
                 self.chromaReceivers=self.chromaReceivers.filter { graph.node($0.key)?.kind == .chromaDecoder }
                 self.instruments=self.instruments.filter { graph.node($0.key)?.kind == .loopmother && graph.node($0.key)?.enabled == true }
-                self.graph = graph; self.plan = (try? graph.orderedNodes()) ?? []; self.inputs = [:]; self.inputChannels = [:]; self.audioConsumers = []; self.channelResampling.removeAll()
-                for edge in graph.edges where graph.node(edge.source)?.kind.outputType(at:edge.outputIndex) == .audio { self.inputs[edge.target,default:[:]][edge.input] = edge.source; self.audioConsumers.insert(edge.source); if let channel=graph.node(edge.source)?.kind.audioChannel(at:edge.outputIndex) { self.inputChannels[edge.target,default:[:]][edge.input]=channel } }
+                self.graph = graph; self.plan = ((try? graph.orderedNodes()) ?? []).filter { node in
+                    node.kind.outputTypes.contains(.audio) || node.inputTypes.contains(.audio) ||
+                    node.kind.outputType == .control || node.kind.outputType == .vectorPath
+                }; self.inputs = [:]; self.inputChannels = [:]; self.audioConsumers = []; self.channelResampling.removeAll()
+                self.routing = SignalRouting(graph)
+                for edge in graph.edges {
+                    guard let kind = self.routing.nodes[edge.source]?.kind, kind.outputType(at:edge.outputIndex) == .audio else { continue }
+                    self.inputs[edge.target,default:[:]][edge.input] = edge.source
+                    self.audioConsumers.insert(edge.source)
+                    self.inputChannels[edge.target,default:[:]][edge.input] = kind.audioChannel(at:edge.outputIndex)
+                }
                 var historySources: [UUID:UUID]=[:]
                 for scope in graph.nodes where [.rasterSynth,.voltageVisualizer,.voltageFluid,.oscilloscope].contains(scope.kind) {
                     let incoming=self.inputs[scope.id] ?? [:]
@@ -374,6 +393,8 @@ final class AudioGraphEngine {
         let silence = [Float](repeating:0,count:audioFrames*2)
         var captureSamples: [UUID:([Float],Double)]=[:]
         var blocks: [UUID:AudioBlock] = [:], status: [UUID:String] = [:], states: [UUID:VideoAudioClock] = [:], controls: [UUID:Double] = [:]
+        var pathSignals: [SignalOutlet:PathSignal] = [:]
+        var references: [SignalOutlet:FrameReference] = [:]
         var channelBlocks: [UUID:[Int:AudioBlock]] = [:]
         func inputBlock(_ target: UUID,_ port: Int) -> AudioBlock? {
             guard let source=inputs[target]?[port],let block=blocks[source] else { return nil }
@@ -395,7 +416,18 @@ final class AudioGraphEngine {
         for original in plan where demanded.contains(original.id) {
             var node = original
             for (key,binding) in node.modulations ?? [:] where binding.enabled {
-                if let value = apcIDs.contains(binding.source) ? apcValues[binding.outputIndex] : controls[binding.source] { node.parameters[key] = binding.minimum+(binding.maximum-binding.minimum)*value }
+                if let value = apcIDs.contains(binding.source) ? apcValues[binding.outputIndex] : controls[binding.source], let spec=node.parameterDefinitions.first(where:{ $0.key == key }) { node.parameters[key] = binding.value(at:value,spec:spec) }
+            }
+            if node.kind.outputType == .vectorPath {
+                guard node.enabled else { continue }
+                let signature = VectorPath.Signature(node)
+                if vectorPaths[node.id]?.0 != signature {
+                    vectorPaths[node.id] = (signature, VectorPath.shape(node))
+                }
+                if let path = vectorPaths[node.id]?.1 {
+                    pathSignals[SignalOutlet(node:node.id, port:0)] = PathSignal(path:path, rotation:node.value("rotation") * .pi/180, angularVelocity:node.value("spin") * 2 * .pi)
+                }
+                continue
             }
             let incoming = inputs[node.id] ?? [:]
             let audioRate=processingRates[node.id] ?? 48000
@@ -445,16 +477,15 @@ final class AudioGraphEngine {
             }
             if node.kind == .chromaDecoder {
                 guard playing,node.enabled,let source=incoming[0],let block=inputBlock(node.id,0),
-                      let reference=graph.edges.first(where:{ $0.target == node.id && $0.input == 1 }),
-                      let encoder=graph.node(reference.source),encoder.enabled,encoder.kind == .chromaEncoder else { continue }
-                let format=ChromaFormat(format:Int(encoder.value("format")),fps:encoder.value("fps"),carrierProfile:Int(encoder.value("carrierProfile")))
-                let key="\(source)|\(reference.source)|\(Int(node.value("channel")))|\(Int(node.value("decodeMode")))"
+                      let outlet=routing.sockets[node.id]?[1]?.outlet,let reference=references[outlet] else { continue }
+                let format=reference.format
+                let key="\(source)|\(routing.sockets[node.id]?[0]?.outputIndex ?? 0)|\(outlet.node)|\(outlet.port)|\(Int(node.value("channel")))|\(Int(node.value("decodeMode")))"
                 if chromaReceivers[node.id]?.format != format || chromaReceiverKeys[node.id] != key {
                     chromaReceivers[node.id]=ChromaReceiver(format:format);chromaReceiverKeys[node.id]=key
                 }
                 let receiver=chromaReceivers[node.id]!
                 let live=node.value("decodeMode")>0.5
-                let gain=Float(pow(10,node.value("returnGain")/20)/max(0.0001,encoder.value("level")))
+                let gain=Float(pow(10,node.value("returnGain")/20)/max(0.0001,reference.level))
                 let returned=receiver.append(block.resampled(to:48000).samples,channel:Int(node.value("channel")),freeRunning:live,gain:gain,scanPhase:node.value("scanPhase"))
                 if !returned.isEmpty { chroma.publish(receiver,id:node.id,time:host,freeRunning:live) }
                 continue
@@ -513,6 +544,7 @@ final class AudioGraphEngine {
                     } else { _ = instrumentMIDI.drain(node.id);status[node.id]="Transport paused" }
                 case .chromaEncoder:
                     let format=ChromaFormat(format:Int(node.value("format")),fps:node.value("fps"),carrierProfile:Int(node.value("carrierProfile")))
+                    references[SignalOutlet(node:node.id, port:1)] = FrameReference(format:format, level:node.value("level"))
                     if chromaTransmitters[node.id]?.format != format { chromaTransmitters[node.id]=ChromaTransmitter(format:format) }
                     let transmitter=chromaTransmitters[node.id]!
                     if let frame=chroma.input(node.id) { transmitter.submit(frame) }
@@ -521,21 +553,14 @@ final class AudioGraphEngine {
                     status[node.id]=String(format:"%d × %d color · %.2f fps · %.1f kHz carrier · %@",format.width,format.height,format.fps,Double(format.carrierHz)/1000,node.value("channel")<0.5 ? "left":"right")
                 case .voltageEncoder:
                     rates[node.id] = node.value("rate")
-                    if let edge=graph.edges.first(where:{ $0.target == node.id && $0.input == 0 }),
-                       var shape=graph.node(edge.source),shape.enabled {
-                        for (key,binding) in shape.modulations ?? [:] where binding.enabled {
-                            if let value=controls[binding.source] { shape.parameters[key]=binding.minimum+(binding.maximum-binding.minimum)*value }
-                        }
-                        let key=VectorPath.Signature(shape)
-                        if vectorPaths[shape.id]?.0 != key { vectorPaths[shape.id]=(key,VectorPath.shape(shape)) }
-                        let path=vectorPaths[shape.id]!.1,rate=node.value("rate"),level=Float(node.value("level"))
+                    if let outlet=routing.sockets[node.id]?[0]?.outlet, let signal=pathSignals[outlet] {
+                        let rate=node.value("rate"),level=Float(node.value("level"))
                         let sampleRate=audioRate,frames=audioFrames
                         let levelX=Float(node.value("levelX")),levelY=Float(node.value("levelY"))
-                        let rotation=shape.value("rotation")*Double.pi/180,spin=shape.value("spin")*2*Double.pi
                         var phase=vectorPhases[node.id] ?? 0
                         for i in 0..<frames {
-                            let angle=rotation+(time+Double(i)/sampleRate)*spin
-                            let point=path.point(phase,rotation:angle)*level
+                            let angle=signal.rotation+(time+Double(i)/sampleRate)*signal.angularVelocity
+                            let point=signal.path.point(phase,rotation:angle)*level
                             samples[i*2]=point.x*levelX;samples[i*2+1]=point.y*levelY
                             if playing { phase += rate/sampleRate; phase -= floor(phase) }
                         }

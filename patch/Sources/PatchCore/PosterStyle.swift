@@ -75,10 +75,10 @@ public enum PosterStyle {
     /// inputs and a generated paper finish. Their wired images become image
     /// layers in the type's free layout; the paper settings are dropped.
     static let legacyComposerKeys: Set<String> = ["textureMode","textureOpacity","textureOrder","dustMode","dustOpacity","dustInvert","paper","grain","folds","wear","corner","seed"]
-    static func needsMigration(_ graph: Graph) -> Bool {
+    package static func needsMigration(_ graph: Graph) -> Bool {
         graph.nodes.contains { $0.kind == .posterText || $0.kind == .posterComposer && ($0.parameters["margin"] == nil || !legacyComposerKeys.union(chromeKeys).isDisjoint(with:$0.parameters.keys)) }
     }
-    static func migrate(_ graph: Graph) -> Graph {
+    package static func migrate(_ graph: Graph) -> Graph {
         var migrated = graph
         for composer in graph.nodes where composer.kind == .posterComposer && !legacyComposerKeys.isDisjoint(with:composer.parameters.keys) {
             let incoming = graph.edges.filter { $0.target == composer.id }

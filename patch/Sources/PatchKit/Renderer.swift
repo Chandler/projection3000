@@ -5,7 +5,7 @@ import ImageIO
 import PatchCore
 import OutputBridge
 
-private struct Uniforms {
+struct Uniforms {
     var a = SIMD4<Float>(repeating: 0)
     var b = SIMD4<Float>(repeating: 0)
     var c = SIMD4<Float>(repeating: 0)
@@ -134,7 +134,10 @@ final class Renderer {
     var geometries: [UUID:GeometryResource] = [:]
     var shaders: [UUID:ShaderResource] = [:]
     var glowPreviewResource: ShaderResource?
-    var cellularGrids: [String:CellularGrid] = [:]
+    var cellularGrids: [UUID:CellularGrid] = [:]
+    var fieldPipelines: [FieldProgram:ShaderResource] = [:]
+    private var fieldSources: [UUID:FieldInput] = [:]
+    private var cellularGridReference: [UUID:UUID] = [:]
     private var meshDetails: [UUID:(String?,MeshGradientStyle.Detail)] = [:]
     private var membranes: [UUID:(key:[Double],texture:MTLTexture?)] = [:]
     /// One type job per node at a time; while dragging, the newest state is set
@@ -203,6 +206,7 @@ final class Renderer {
     private var inFlight = DispatchSemaphore(value: 3)
     private var plan: [Node] = []
     private var inputs: [UUID: [Int: UUID]] = [:]
+    private var routing = SignalRouting()
     private var plannedGraph: Graph?
     let renderQueue = DispatchQueue(label:"patch.render",qos:.userInteractive)
     private var frameTimer: DispatchSourceTimer?
@@ -270,7 +274,10 @@ final class Renderer {
         guard running else { return }
         midiGraph.update(graph,playing:playing)
         renderQueue.async {
-            self.shaders.merge(resources) { _, new in new }
+            for (id,resource) in resources {
+                if let program = resource.fieldProgram { self.fieldPipelines[program] = resource }
+                else { self.shaders[id] = resource }
+            }
             self.activeGraph = graph; self.publicationGraph = graph; self.playing = playing
             self.audioGraph.update(graph,playing:playing,time:self.renderTime)
         }
@@ -441,6 +448,7 @@ final class Renderer {
                 } else { paletteRenderer.invalidate(node.id) }
             }
             plan = (try? graph.orderedNodes()) ?? []
+            routing = SignalRouting(graph)
             inputs = [:]
             for e in graph.edges { inputs[e.target, default: [:]][e.input] = e.source }
             let ids = Set(graph.nodes.map(\.id))
@@ -449,7 +457,30 @@ final class Renderer {
             staticFrames=staticFrames.filter { ids.contains($0.key) }
             dither.retain(ids)
             glow.retain(ids)
-            cellularGrids=cellularGrids.filter { _,grid in graph.edges.contains { $0.source == grid.fieldID && $0.target == grid.consumerID } }
+            cellularGrids = cellularGrids.filter { routing.nodes[$0.key]?.kind == .cellularField }
+            // Existing shows derive their simulation grid from their LED display. Use
+            // document order to select one domain when several displays share a field.
+            cellularGridReference.removeAll(keepingCapacity:true)
+            fieldSources.removeAll(keepingCapacity:true)
+            for node in graph.nodes where node.kind.outputType == .field {
+                fieldSources[node.id] = FieldInput(producer:node)
+            }
+            var usedPrograms = Set<FieldProgram>()
+            for node in graph.nodes {
+                if node.kind.outputType == .field, node.kind != .fieldMix, let input = fieldSources[node.id] {
+                    usedPrograms.insert(FieldProgram(primary:input,secondary:nil))
+                }
+                guard [.ledMatrix,.fieldMix,.fieldRender].contains(node.kind) else { continue }
+                func fieldInput(_ slot: Int) -> FieldInput? {
+                    guard let edge = routing.sockets[node.id]?[slot], let source = routing.nodes[edge.source], source.enabled else { return nil }
+                    if node.kind == .ledMatrix, source.kind == .cellularField, cellularGridReference[source.id] == nil {
+                        cellularGridReference[source.id] = node.id
+                    }
+                    return fieldSources[source.id]
+                }
+                usedPrograms.insert(FieldProgram(primary:fieldInput(node.kind == .ledMatrix ? 1 : 0),secondary:fieldInput(node.kind == .ledMatrix ? 2 : 1)))
+            }
+            fieldPipelines = fieldPipelines.filter { usedPrograms.contains($0.key) }
             geometries = geometries.filter { ids.contains($0.key) }; shaders = shaders.filter { ids.contains($0.key) }
             meshDetails = meshDetails.filter { ids.contains($0.key) }
             audioVisualizers = audioVisualizers.filter { ids.contains($0.key) }
@@ -477,9 +508,7 @@ final class Renderer {
         var previewLayers = raster
         var layerPreviewFrames: [UUID:MTLTexture] = [:]
         var required = Set<UUID>()
-        let nodes = Dictionary(uniqueKeysWithValues:plan.map { ($0.id,$0) })
-        var dependencies: [UUID:[Edge]] = [:]
-        for edge in graph.edges { dependencies[edge.target,default:[]].append(edge) }
+        let nodes = routing.nodes, dependencies = routing.incoming, sockets = routing.sockets
         // Resolve controls before walking image dependencies. A zero MUX input
         // can sleep while its fader/LFO/envelope keeps running to wake it again.
         let apcValues = apcState.snapshot
@@ -496,8 +525,8 @@ final class Renderer {
             guard var node=nodes[id] else { return nil }
             if node.enabled {
                 for (key,binding) in node.modulations ?? [:] where binding.enabled && usesModulation(node,key) {
-                    if let value=controlValue(binding.source,binding.outputIndex) {
-                        node.parameters[key]=binding.minimum+(binding.maximum-binding.minimum)*value
+                    if let value=controlValue(binding.source,binding.outputIndex), let spec=node.parameterDefinitions.first(where:{ $0.key == key }) {
+                        node.parameters[key]=binding.value(at:value,spec:spec)
                         modulationValues[id,default:[:]][key]=node.parameters[key]
                     }
                 }
@@ -562,6 +591,8 @@ final class Renderer {
         var videoClocks: [UUID:VideoAudioClock] = [:]
         var paletteValues: [UUID:ColorPalette] = [:]
         var profileFrames: [UUID:ProfileVideoFrame] = [:]
+        var frameReferences: [SignalOutlet:UUID] = [:]
+        var fields: [SignalOutlet:FieldSignal] = [:]
         var effectiveNodes: [UUID:Node] = [:]
         var staticVersions: [UUID:UInt64] = [:]
         var staticCacheHits=0
@@ -571,7 +602,7 @@ final class Renderer {
             effectiveNodes[node.id] = node
             let incoming = inputs[node.id] ?? [:]
             func inputTexture(_ input: Int) -> MTLTexture {
-                guard let edge=dependencies[node.id]?.first(where:{$0.input == input}) else { return black }
+                guard let edge=sockets[node.id]?[input] else { return black }
                 if nodes[edge.source]?.kind.outputType(at:edge.outputIndex) == .collection {
                     return layerPreviewFrames[edge.source] ?? textures[edge.source] ?? black
                 }
@@ -591,6 +622,36 @@ final class Renderer {
                 continue
             }
             if node.kind.isMIDINode { renderStatus[node.id]=midiStatus[node.id] ?? "Waiting for MIDI";continue }
+            if node.kind.outputType == .field && node.kind != .fieldMix {
+                let palette = incoming[0].map { paletteValues[$0] ?? .empty } ?? PaletteStyle.defaultPalette
+                guard let input = fieldSources[node.id], var field = FieldSignal(node:node,input:input,palette:palette,time:renderTime) else {
+                    renderStatus[node.id] = node.kind == .fieldShader ? "Choose a Metal field shader" : "Field evaluator unavailable"
+                    continue
+                }
+                let projectSize = VideoDimensions(graph.width,graph.height)
+                let grid: VideoDimensions
+                if field.input == .cells {
+                    let displayID = cellularGridReference[node.id]
+                    grid = cellularDomain(node,display:displayID.flatMap(resolvedNode),displaySize:displayID.flatMap { streamSizes[$0] },project:projectSize)
+                    let result = cellularTexture(node,columns:grid.width,rows:grid.height,command:command)
+                    field.texture = result.0; renderStatus[node.id] = result.1
+                    guard field.texture != nil else { continue }
+                } else {
+                    grid = fieldPreviewDimensions(projectSize)
+                }
+                fields[SignalOutlet(node:node.id,port:0)] = field
+                if node.kind != .streakGlow {
+                    if raster.contains(node.id) {
+                        let size = fieldPreviewDimensions(projectSize)
+                        let previous = targets[node.id]
+                        let result = self.preview(field,grid:grid,size:size,previous:previous,command:command)
+                        if let texture = result.texture { targets[node.id] = texture; textures[node.id] = texture }
+                        if let status = result.status { renderStatus[node.id] = status }
+                    }
+                    if renderStatus[node.id] == nil { renderStatus[node.id] = "Ready" }
+                    continue
+                }
+            }
             if node.kind == .streakGlow {
                 let function=StreakGlowStyle.functions[max(0,min(StreakGlowStyle.functions.count-1,Int(node.value("function"))))]
                 renderStatus[node.id] = node.enabled ? "Glow · \(function) · gray = neutral light" : node.kind.pausedStatus
@@ -610,11 +671,8 @@ final class Renderer {
                 }
                 continue
             }
-            if node.kind == .cellularField { renderStatus[node.id]=node.enabled ? "Cellular automata · LED Matrix grid" : node.kind.pausedStatus; continue }
-            if node.kind == .flashCells || node.kind == .dataStream || node.kind == .blockerField || node.kind == .streakField || node.kind == .waterfallField {
-                renderStatus[node.id] = node.enabled ? "Procedural field · evaluated per LED" : node.kind.pausedStatus; continue
-            }
             if node.kind == .chromaEncoder,node.enabled,incoming[0] != nil {
+                frameReferences[SignalOutlet(node:node.id,port:1)] = node.id
                 chromaRenderer.capture(a,node:node,now:now,command:command,queue:renderQueue,bridge:audioGraph.chroma)
             }
             if node.kind.isAudioNode {
@@ -640,14 +698,14 @@ final class Renderer {
                 var layers=[[String:Any]]()
                 for channel in 0..<2 {
                     let level=channel == 0 ? 1-mix:mix
-                    guard level>0,let edge=dependencies[node.id]?.first(where:{$0.input == channel}),let upstream=effectiveNodes[edge.source] else { continue }
+                    guard level>0,let edge=sockets[node.id]?[channel],let upstream=effectiveNodes[edge.source] else { continue }
                     var recipe: [String:Any]?
                     if upstream.kind.outputType(at:edge.outputIndex) == .collection {
                         recipe=outputRuntime.recipes[edge.source]
                     } else {
                         var source=edge.source,port=edge.outputIndex,visited=Set<UUID>()
                         while visited.insert(source).inserted,let n=effectiveNodes[source],!n.enabled,
-                              let input=n.kind.bypassInput(forOutput:port),let bypass=dependencies[source]?.first(where:{$0.input == input}) {
+                              let input=n.kind.bypassInput(forOutput:port),let bypass=sockets[source]?[input] {
                             source=bypass.source;port=bypass.outputIndex
                         }
                         recipe=["version":1,"kind":"surfaceGate","params":["speed":0.0,"onTime":1.0,"brightness":1.0],"colors":[["r":1.0,"g":1.0,"b":1.0]],"videoSource":"patch:\(source.uuidString):\(port)","graphCompatible":true]
@@ -659,14 +717,14 @@ final class Renderer {
             }
             if node.kind == .videoCollection {
                 let sources: [(String,MTLTexture)] = (0..<8).compactMap { channel in
-                    guard let edge=dependencies[node.id]?.first(where:{$0.input == channel}) else { return nil }
+                    guard let edge=sockets[node.id]?[channel] else { return nil }
                     // A bypassed effect still supplies video, but its own public
                     // port is disabled. Retain the upstream video port instead.
                     var source=edge.source,port=edge.outputIndex
                     var visited=Set<UUID>()
                     while visited.insert(source).inserted,let upstream=effectiveNodes[source],!upstream.enabled,
                           let input=upstream.kind.bypassInput(forOutput:port),
-                          let bypass=dependencies[source]?.first(where:{$0.input == input}) {
+                          let bypass=sockets[source]?[input] {
                         source=bypass.source;port=bypass.outputIndex
                     }
                     return ("patch:\(source.uuidString):\(port)",textures[edge.source] ?? black)
@@ -681,7 +739,7 @@ final class Renderer {
                 var videoLevels=Array(repeating:Float(0),count:8),modes=Array(repeating:UInt32(0),count:8)
                 var layers=[[String:Any]](),previewSources=[MTLTexture](),previewLevels=[Float]()
                 for channel in 0..<node.channelCount {
-                    guard let edge=dependencies[node.id]?.first(where:{$0.input == channel}),let upstream=effectiveNodes[edge.source] else { continue }
+                    guard let edge=sockets[node.id]?[channel],let upstream=effectiveNodes[edge.source] else { continue }
                     let level=node.value("level\(channel+1)")
                     if upstream.kind.outputType(at:edge.outputIndex) == .video {
                         videoLevels[channel]=Float(level)
@@ -733,7 +791,7 @@ final class Renderer {
             }
             if node.kind == .lightningPulses {
                 let palette=incoming[0].map { paletteValues[$0] ?? .empty }
-                let phase=dependencies[node.id]?.first(where:{ $0.input == 1 }).flatMap { controlValue($0.source,$0.outputIndex) }
+                let phase=sockets[node.id]?[1].flatMap { controlValue($0.source,$0.outputIndex) }
                 let (texture,recipe)=outputRuntime.traceRuntime.render(node,palette:palette,phase:phase,time:renderTime,command:command,preview:raster.contains(node.id))
                 outputRuntime.recipes[node.id]=recipe;textures[node.id]=texture ?? black
                 renderStatus[node.id]=phase == nil ? "Trace · Free running" : "Trace · Phase input"
@@ -896,8 +954,9 @@ final class Renderer {
             }
             if (node.kind == .vectorShape || node.kind == .vectorText || node.kind == .fluidShape) && !raster.contains(node.id) { renderStatus[node.id]="Closed XY path";continue }
             let dimensions = streamSizes[node.id] ?? VideoDimensions(graph.width,graph.height)
-            if targets[node.id]?.width != dimensions.width || targets[node.id]?.height != dimensions.height {
-                let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: dimensions.width, height: dimensions.height, mipmapped: false)
+            let format: MTLPixelFormat = node.kind == .fieldMix ? .rgba16Float : .bgra8Unorm
+            if targets[node.id]?.width != dimensions.width || targets[node.id]?.height != dimensions.height || targets[node.id]?.pixelFormat != format {
+                let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat:format, width: dimensions.width, height: dimensions.height, mipmapped: false)
                 desc.usage = [.shaderRead, .shaderWrite, .renderTarget]; desc.storageMode = .private
                 targets[node.id] = device.makeTexture(descriptor: desc)
             }
@@ -930,7 +989,7 @@ final class Renderer {
                 continue
             }
             if node.kind == .chromaDecoder {
-                let reference=incoming[1].flatMap { graph.node($0)?.kind == .chromaEncoder ? $0:nil }
+                let reference=sockets[node.id]?[1].flatMap { frameReferences[$0.outlet] }
                 renderStatus[node.id]=chromaRenderer.encode(node,reference:reference,fallback:black,returned:audioGraph.chroma.output(node.id),target:target,now:now,command:command)
                 textures[node.id]=target
                 continue
@@ -1147,17 +1206,7 @@ final class Renderer {
                 if node.hasFerrofluidControls, resource?.error == nil, resource?.pipeline != nil { renderStatus[node.id] = "Ready · \(ferrofluids[node.id]?.sim.spikeCount ?? 0) spikes" }
                 continue
             }
-            var cellularInputs: [Int:MTLTexture] = [:]
-            var cellularStatus: [String] = []
-            if node.kind == .ledMatrix {
-                let columns=Int(node.value("columns").rounded())
-                let rows=node.value("grid")<0.5 ? max(1,Int((Double(columns)*Double(target.height)/Double(target.width)).rounded())) : Int(node.value("rows").rounded())
-                for slot in [1,2] {
-                    guard let id=incoming[slot],let field=effectiveNodes[id],field.enabled,field.kind == .cellularField else { continue }
-                    let (texture,status)=cellularTexture(field,consumer:node.id,slot:slot,columns:columns,rows:rows,command:command)
-                    cellularInputs[slot]=texture; cellularStatus.append(status); renderStatus[field.id]=status
-                }
-            }
+            var secondaryFieldTexture: MTLTexture?
             guard let encoder = command.makeComputeCommandEncoder() else { continue }
             var uniforms = Uniforms(); uniforms.c.x = Float(renderTime)
             var nodePipeline = pipeline
@@ -1281,52 +1330,44 @@ final class Renderer {
                 uniforms.mode.x = 2
                 uniforms.a = .init(Float(node.value("scanlines")), Float(node.value("curvature")), Float(node.value("aberration")), Float(node.value("glow")))
                 uniforms.b = .init(Float(node.value("vignette")), Float(node.value("noise")),0,0)
-            case .ledMatrix:
+            case .ledMatrix, .fieldRender, .fieldMix:
                 uniforms.mode.x = 14
                 uniforms.mode.y = UInt32(node.value("shape"))
                 uniforms.mode.z = UInt32(node.value("color"))
                 uniforms.mode.w = UInt32(node.value("sample"))
-                let columns = node.value("columns").rounded()
+                let columns = node.kind == .ledMatrix ? node.value("columns").rounded() : Double(min(320,target.width))
                 let rows = node.value("grid") < 0.5 ? max(1,(columns*Double(target.height)/Double(target.width)).rounded()) : node.value("rows").rounded()
                 uniforms.a = .init(Float(columns),Float(rows),Float(node.value("size")),Float(node.value("glow")))
                 uniforms.b = .init(Float(node.value("gain")),Float(node.value("gamma")),Float(node.value("black")),Float(node.value("idle")))
                 uniforms.d = .init(Float(node.value("hue")),Float(node.value("saturation")),Float(node.value("brightness")),Float(node.value("whiteHot")))
                 uniforms.e.x = Float(node.value("invert"))
-                func fieldNode(_ index: Int) -> Node? {
-                    guard let id=incoming[index],var field=graph.node(id),field.enabled else { return nil }
-                    for (key,binding) in field.modulations ?? [:] where binding.enabled {
-                        if let value=controlValue(binding.source,binding.outputIndex) { field.parameters[key]=binding.minimum+(binding.maximum-binding.minimum)*value }
-                    }
-                    return field
+                let isMatrix = node.kind == .ledMatrix
+                let primarySlot = isMatrix ? 1 : 0
+                let lightSlot = isMatrix ? 2 : 1
+                let primary = sockets[node.id]?[primarySlot].flatMap { fields[$0.outlet] }
+                let light = sockets[node.id]?[lightSlot].flatMap { fields[$0.outlet] }
+                if !isMatrix { uniforms.mode.x = node.kind == .fieldMix ? 18 : 17; uniforms.a.z = Float(node.value("mix")) }
+                if let primary {
+                    first = primary.texture ?? black
+                    primary.bind(to:&audioSamples,offset:0,columns:columns,rows:rows)
+                    uniforms.c.x = primary.time
+                } else if !isMatrix { first = black }
+                if let light {
+                    light.bind(to:&audioSamples,offset:16,columns:columns,rows:rows)
+                    secondaryFieldTexture = light.texture
                 }
-                func fieldValues(_ field: Node, offset: Int) -> [Float] {
-                    if field.kind == .flashCells {
-                        let source=graph.edges.first { $0.target == field.id && $0.input == 0 }?.source
-                        let palette=source.map { paletteValues[$0] ?? .empty } ?? PaletteStyle.defaultPalette
-                        let colors=Array(palette.colors.prefix(64))
-                        let base=offset == 0 ? 32 : 224
-                        for (i,c) in colors.enumerated() { audioSamples[base+i*3]=Float(c.r);audioSamples[base+i*3+1]=Float(c.g);audioSamples[base+i*3+2]=Float(c.b) }
-                        var values=[Float](repeating:0,count:16)
-                        for (i,key) in ["rate","chance","onTime","fade","colorMode","seed"].enumerated() { values[i]=Float(field.value(key)) }
-                        values[6]=Float(columns);values[7]=Float(rows);values[8]=Float(colors.count);values[9]=Float(base-offset);values[15]=Float(renderTime)
-                        return values
-                    }
-                    if field.kind == .cellularField { return [Float(field.value("depth")),Float(field.value("output"))]+[Float](repeating:0,count:14) }
-                    let keys = field.kind == .waterfallField ? ["rows","rate","blockers","gap","widthMin","widthMax","durationMin","durationMax","motion","motionRate","pattern","tail","seed","probability"] : field.kind == .streakField ? ["rows","travel","length","activity","grouping","stagger","tail","seed"] : field.kind == .streakGlow ? StreakGlowStyle.keys : field.kind == .blockerField ? ["rows","rate","segments","tail","density","variance","depth","blockers","motion","height","jitter","refresh","seed"] : ["rows","rate","packets","length","density","variance","mask","maskScale","maskSpeed","bands","jitter","refresh","seed","pattern"]
-                    var values=keys.map { Float(field.value($0)) }
-                    values += [Float](repeating:0,count:16-values.count)
-                    values[15]=Float(renderTime*(field.kind == .waterfallField ? 1 : field.value("speed"))); return values
-                }
-                let primary=fieldNode(1),light=fieldNode(2)
-                if primary?.kind == .cellularField { first=cellularInputs[1] ?? black }
                 if primary != nil || light != nil {
-                    let resource=matrixField(node.id,primary:primary,light:light)
-                    if let custom=resource?.pipeline { nodePipeline=custom } else { first=black }
-                    if let primary { audioSamples.replaceSubrange(0..<16,with:fieldValues(primary,offset:0)); uniforms.c.x=Float(renderTime*([.waterfallField,.flashCells].contains(primary.kind) ? 1 : primary.value("speed"))) }
-                    if let light { audioSamples.replaceSubrange(16..<32,with:fieldValues(light,offset:16)) }
-                    renderStatus[node.id]=resource?.error ?? (resource?.pipeline == nil ? "Compiling fields…" : (light != nil ? "Signal × Light · direct evaluation" : "Field · direct evaluation"))
-                } else { renderStatus[node.id]=incoming[0] == nil ? "Connect Video or Field" : "Video · sampled per LED" }
-                if !cellularStatus.isEmpty { renderStatus[node.id]=(renderStatus[node.id] ?? "")+" · "+cellularStatus.joined(separator:" · ") }
+                    let resource = fieldPipeline(FieldProgram(primary:primary?.input,secondary:light?.input))
+                    guard let compiled = resource.pipeline else {
+                        encoder.endEncoding()
+                        textures[node.id] = black
+                        renderStatus[node.id] = resource.error ?? "Compiling fields…"
+                        continue
+                    }
+                    nodePipeline = compiled
+                    renderStatus[node.id] = resource.error ?? "Ready"
+                } else { renderStatus[node.id]=isMatrix && incoming[0] != nil ? "Video" : "Connect Field" }
+                if node.kind == .fieldMix { fields[SignalOutlet(node:node.id,port:0)] = FieldSignal(texture:target) }
             case .pictureInPicture:
                 uniforms.mode.x = 13
                 let w = node.value("width"), h = node.value("height")
@@ -1367,7 +1408,7 @@ final class Renderer {
             }
             audioSamples.withUnsafeBytes { encoder.setBytes($0.baseAddress!,length:$0.count,index:1) }
             encoder.setComputePipelineState(nodePipeline)
-            encoder.setTexture(first, index: 0); encoder.setTexture(cellularInputs[2] ?? b, index: 1); encoder.setTexture(target, index: 2)
+            encoder.setTexture(first, index: 0); encoder.setTexture(secondaryFieldTexture ?? b, index: 1); encoder.setTexture(target, index: 2)
             encoder.setBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
             encoder.dispatchThreads(.init(width: target.width, height: target.height, depth: 1), threadsPerThreadgroup: .init(width: 16, height: 16, depth: 1))
             encoder.endEncoding(); textures[node.id] = target
@@ -1514,10 +1555,27 @@ final class Renderer {
             render(activeGraph,preview:id)
             return stateLock.withLock { publishedTextures[id] }
         }
-        guard let tex=texture, let buffer = queue.makeCommandBuffer(), let blit = buffer.makeBlitCommandEncoder(), let copy = device.makeBuffer(length: ((tex.width * 4 + 255) / 256) * 256 * tex.height, options: .storageModeShared) else { throw GraphError("No rendered frame.") }
+        guard let source=texture, let buffer=queue.makeCommandBuffer() else { throw GraphError("No rendered frame.") }
+        let tex: MTLTexture
+        if source.pixelFormat == .rgba16Float {
+            // PNG needs an SDR BGRA surface. The graph keeps the full field range.
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat:.bgra8Unorm,width:source.width,height:source.height,mipmapped:false)
+            descriptor.usage = [.shaderWrite,.shaderRead]; descriptor.storageMode = .private
+            guard let converted=device.makeTexture(descriptor:descriptor), let encoder=buffer.makeComputeCommandEncoder() else { throw GraphError("Cannot convert field snapshot.") }
+            var params=Uniforms(); params.mode.x=17
+            var zero=Float(0)
+            encoder.setComputePipelineState(pipeline)
+            encoder.setTexture(source,index:0);encoder.setTexture(black,index:1);encoder.setTexture(converted,index:2)
+            encoder.setBytes(&params,length:MemoryLayout<Uniforms>.stride,index:0)
+            encoder.setBytes(&zero,length:MemoryLayout<Float>.stride,index:1)
+            encoder.dispatchThreads(.init(width:converted.width,height:converted.height,depth:1),threadsPerThreadgroup:.init(width:16,height:16,depth:1))
+            encoder.endEncoding(); tex=converted
+        } else { tex=source }
+        guard let blit=buffer.makeBlitCommandEncoder(), let copy=device.makeBuffer(length:((tex.width*4+255)/256)*256*tex.height,options:.storageModeShared) else { throw GraphError("No snapshot buffer.") }
         let stride = ((tex.width * 4 + 255) / 256) * 256
         blit.copy(from: tex, sourceSlice: 0, sourceLevel: 0, sourceOrigin: .init(x:0,y:0,z:0), sourceSize: .init(width:tex.width,height:tex.height,depth:1), to:copy,destinationOffset:0,destinationBytesPerRow:stride,destinationBytesPerImage:copy.length)
         blit.endEncoding(); buffer.commit(); buffer.waitUntilCompleted()
+        if let error = buffer.error { throw error }
         let data = Data(bytes: copy.contents(), count: copy.length)
         guard let provider = CGDataProvider(data: data as CFData), let image = CGImage(width: tex.width, height: tex.height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: stride, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: [.byteOrder32Little, CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)], provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent), let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else { throw GraphError("Cannot encode snapshot.") }
         CGImageDestinationAddImage(destination, image, nil)

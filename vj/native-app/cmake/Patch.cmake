@@ -36,16 +36,20 @@ add_custom_command(OUTPUT "${VJ_PLUGIN_HOST}"
   COMMENT "Building Patch audio plugin host (Loopmother, VST3)" VERBATIM)
 add_custom_target(vj-plugin-host DEPENDS "${VJ_PLUGIN_HOST}")
 add_dependencies(VJNative vj-plugin-host)
-# Relink when the host changes so the bundle copy below is refreshed.
-set_property(TARGET VJNative APPEND PROPERTY LINK_DEPENDS "${VJ_PLUGIN_HOST}")
+# Refresh bundled assets even when only a shader or user node changes.
+file(GLOB_RECURSE VJ_PATCH_ASSETS CONFIGURE_DEPENDS
+  "${VJ_PATCH_ROOT}/Sources/PatchKit/Resources/*"
+  "${VJ_PATCH_ROOT}/User Nodes/*")
+set_property(TARGET VJNative APPEND PROPERTY LINK_DEPENDS "${VJ_PLUGIN_HOST}" ${VJ_PATCH_ASSETS})
 add_custom_command(TARGET VJNative POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:VJNative>/Frameworks"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${VJ_PATCH_LIBRARY}" "$<TARGET_BUNDLE_CONTENT_DIR:VJNative>/Frameworks/libPatchKit.dylib"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "${VJ_PLUGIN_HOST}" "$<TARGET_BUNDLE_CONTENT_DIR:VJNative>/Frameworks/libPatchAudioPluginHost.dylib"
   COMMAND /usr/bin/codesign --force --sign - "$<TARGET_BUNDLE_CONTENT_DIR:VJNative>/Frameworks/libPatchAudioPluginHost.dylib"
   VERBATIM)
 target_include_directories(VJNative PRIVATE "${VJ_PATCH_ROOT}/Sources/OutputBridge/include")
 target_include_directories(vj_preview_engine PRIVATE "${VJ_PATCH_ROOT}/Sources/OutputBridge/include")
-set_property(TARGET VJNative APPEND PROPERTY BUILD_RPATH "${VJ_PATCH_BUILD}/release" "/usr/lib/swift")
+set_property(TARGET VJNative APPEND PROPERTY BUILD_RPATH "@executable_path/../Frameworks" "/usr/lib/swift")
 add_custom_command(TARGET VJNative POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${VJ_PATCH_BUILD}/release/Patch_PatchKit.bundle" "$<TARGET_BUNDLE_CONTENT_DIR:VJNative>/Resources/PatchResources.bundle"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${VJ_PATCH_ROOT}/User Nodes" "$<TARGET_BUNDLE_CONTENT_DIR:VJNative>/Resources/User Nodes"

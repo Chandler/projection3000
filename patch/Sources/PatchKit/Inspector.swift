@@ -48,19 +48,38 @@ struct Inspector: View {
             HStack {
                 Text(node?.name ?? "No selection").lineLimit(1)
                 Spacer()
-                Text(node?.kind.isMIDINode == true ? (node?.kind == .midiOut ? "MIDI DEVICE OUTPUT":"MIDI") : "\(workspace.graph.videoDimensions(node?.id).width) × \(workspace.graph.videoDimensions(node?.id).height)").font(.system(size:10,design:.monospaced)).foregroundStyle(.secondary)
+                if let node {
+                    if node.kind.previewKind == .video {
+                        let size = workspace.graph.videoDimensions(node.id)
+                        Text("\(size.width) × \(size.height)").monospacedDigit()
+                    } else {
+                        Text(node.kind.outputType?.rawValue.capitalized ?? node.kind.category)
+                    }
+                }
+
             }.font(.system(size:11)).padding(12)
             Divider()
             ScrollView {
                 VStack(alignment:.leading,spacing:18) {
                     if let node {
-                        if isLibraryPreview { Text("Drag from the library to add with these settings. Clicking elsewhere resets the preview.").font(.system(size:10)).foregroundStyle(.secondary) }
                         HStack {
-                            Text(node.kind.title.uppercased()).font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(Color(nsColor:.node(node.kind)))
+                            Text(node.catalogTitle).font(.system(size:15,weight:.semibold)).foregroundStyle(Color(nsColor:.node(node.kind)))
                             Spacer()
                             Toggle(node.kind.isOutput ? "Active" : "Enabled",isOn:Binding(get:{ self.node?.enabled ?? true },set:{ value in workspace.update(node.id,action:value ? "Resume Node" : "Pause Node") { $0.enabled = value } })).toggleStyle(.checkbox).controlSize(.mini).disabled(isLibraryPreview && node.kind.isOutput)
                         }
                         TextField("Name",text:Binding(get:{ self.node?.name ?? "" },set:{ name in workspace.update(node.id,action:"Rename Node") { $0.name = name } })).textFieldStyle(.squareBorder)
+                        DisclosureGroup("Ports") {
+                            ForEach([false,true],id:\.self) { output in
+                                ForEach(node.kind.ports(output:output).filter { output || node.inputs.indices.contains($0.index) },id:\.id) { port in
+                                    HStack {
+                                        Image(systemName:output ? "arrow.up.right" : "arrow.down.right")
+                                        Text(port.name)
+                                        Spacer()
+                                        Text(port.type.rawValue).foregroundStyle(Color(nsColor:.signal(port.type)))
+                                    }.font(.callout)
+                                }
+                            }
+                        }
                         if !isLibraryPreview,let app = NodeApp.for(node) { NodeAppButton(workspace:workspace,id:node.id,app:app) }
                         if !isLibraryPreview { PublicationInspector(workspace:workspace,node:node) }
                         if let status = renderer.status[node.id], status != "Ready", !node.kind.isOutput {
@@ -208,7 +227,7 @@ struct Inspector: View {
                         if node.kind != .audioPlugin && node.kind != .projector && node.kind != .powerGlitch && node.kind != .glowFaces && node.kind != .lightningPulses && node.kind != .paletteAdjust && node.kind != .meshGradient && node.kind != .ab && node.kind != .mux && node.kind != .layerMux && !node.isBlinds && !node.hasLiquidSculptureControls && node.kind.outputType != .dots && node.kind != .projectionDots && node.kind != .dither && node.kind != .poseRender && node.kind != .crop && node.kind != .channelSplit && node.kind != .channelColors && node.kind != .pictureInPicture && node.kind != .ledMatrix && !node.parameterSpecs.isEmpty {
                             VStack(alignment:.leading,spacing:16) {
                                 HStack { sectionLabel("PARAMETERS"); Spacer(); Button("Reset") { workspace.beginGesture(); for p in node.parameterSpecs { workspace.parameter(node.id,p.key,p.initial) }; workspace.endGesture("Reset Parameters") }.buttonStyle(.plain).font(.system(size:10)).foregroundStyle(.secondary) }
-                                ForEach(node.parameterSpecs.filter { p in !(node.kind == .palette && ["seed","scheme"].contains(p.key)) && !(node.hasMetallicPoolControls && p.key == "blend" && node.value("function") < 4) && node.kind != .metroSequencer && !["playing","seek","channelX","channelY"].contains(p.key) && !(node.kind == .voltageVisualizer && ["historyMS","cycles","rate"].contains(p.key)) && !(node.kind == .midiOut && p.key == "channel") && !(node.kind == .cellularField && node.value("rule").rounded() != 4 && ["states","threshold"].contains(p.key)) && !(node.kind == .streakGlow && !StreakGlowStyle.shows(p.key,function:Int(node.value("function")))) && !(node.kind == .audioVisualizer && ((p.key == "bars" && Int(node.value("mode")) != 4) || (p.key == "ridges" && Int(node.value("mode")) != 5))) && !(node.kind == .graphInkFlow && ((node.value("markStyle")>=0.5 && ["glow","trail"].contains(p.key)) || (node.value("markStyle")<1.5 && ["glassFrost","glassRefraction"].contains(p.key)))) && !((node.kind == .flashFaces || node.kind == .graphInkFlow || node.kind == .graphParticles || node.kind == .graphPulse || node.kind == .graphCloudParticles || node.kind == .graphClouds) && CollectionStyle.colorParameters.contains { $0.key == p.key }) },id:\.key) { p in
+                                ForEach(node.parameterSpecs.filter { p in if node.kind == .fieldShader { return true }; return !(node.kind == .palette && ["seed","scheme"].contains(p.key)) && !(node.hasMetallicPoolControls && p.key == "blend" && node.value("function") < 4) && node.kind != .metroSequencer && !["playing","seek","channelX","channelY"].contains(p.key) && !(node.kind == .voltageVisualizer && ["historyMS","cycles","rate"].contains(p.key)) && !(node.kind == .midiOut && p.key == "channel") && !(node.kind == .cellularField && node.value("rule").rounded() != 4 && ["states","threshold"].contains(p.key)) && !(node.kind == .streakGlow && !StreakGlowStyle.shows(p.key,function:Int(node.value("function")))) && !(node.kind == .audioVisualizer && ((p.key == "bars" && Int(node.value("mode")) != 4) || (p.key == "ridges" && Int(node.value("mode")) != 5))) && !(node.kind == .graphInkFlow && ((node.value("markStyle")>=0.5 && ["glow","trail"].contains(p.key)) || (node.value("markStyle")<1.5 && ["glassFrost","glassRefraction"].contains(p.key)))) && !((node.kind == .flashFaces || node.kind == .graphInkFlow || node.kind == .graphParticles || node.kind == .graphPulse || node.kind == .graphCloudParticles || node.kind == .graphClouds) && CollectionStyle.colorParameters.contains { $0.key == p.key }) },id:\.key) { p in
                                     if node.kind == .video && (p.key == "start" || p.key == "end") {
                                         HStack { Text(p.title); Spacer(); TextField("Seconds",value:Binding(get:{ self.node?.value(p.key) ?? 0 },set:{ workspace.parameter(node.id,p.key,$0) }),format:.number.precision(.fractionLength(3))).textFieldStyle(.squareBorder).frame(width:85) }.midiParameter(workspace:workspace,id:node.id,key:p.key)
                                     } else if let choices = p.choices {
@@ -282,15 +301,18 @@ struct Inspector: View {
                         }
                         Divider()
                         HStack {
-                            Text(node.kind.isMIDINode ? (node.kind == .midiOut ? "MIDI · DEVICE OUTPUT":"MIDI · NOTES & CONTROL") : node.kind == .loopmother ? "MIDI + INSTRUMENT IN → AUDIO OUT" : node.kind.outputType == .vectorPath ? "VECTOR PATH · NORMALIZED XY" : node.kind.outputType == .trace ? "TRACE · NORMALIZED PATH" : node.kind.previewKind == .palette ? "PALETTE · sRGB" : node.kind.outputType == .poses ? "POSES · COCO 17 JOINTS" : node.kind.outputType == .control ? "CONTROL · 0…1" : node.kind.previewKind == .audio ? "AUDIO · 48 kHz STEREO" : (node.kind.outputType == .geometry ? "GEOMETRY · LINE STRIP" : "VIDEO · BGRA8")).font(.system(size:9,design:.monospaced)).foregroundStyle(.tertiary)
+                            Text(node.kind.outputTypes.map(\.rawValue).joined(separator:" · ")).font(.caption).foregroundStyle(.secondary)
+
                             Spacer()
                             if !isLibraryPreview { Button { workspace.selected = node.id; workspace.deleteSelection() } label: { Image(systemName:"trash") }.buttonStyle(.plain).foregroundStyle(.secondary).help("Delete node") }
                         }
                     } else if let id = workspace.selected, let group = workspace.graph.component(id) {
-                        sectionLabel("COMPONENT")
+                        sectionLabel(group.interface == nil ? "COMPONENT" : "SUBPATCH")
                         TextField("Name",text:Binding(get:{ workspace.graph.component(id)?.name ?? "" },set:{ value in workspace.edit("Rename Component") { g in if let i = g.components?.firstIndex(where:{ $0.id == id }) { g.components![i].name = value } } })).textFieldStyle(.squareBorder)
                         Text("\(group.members.count) nodes")
                         Button(group.collapsed ? "Expand Component" : "Collapse Component") { workspace.toggleComponent(id) }
+                        if group.interface != nil { SubpatchInspector(workspace:workspace,group:group) }
+                        else { Button("Extract Subpatch") { workspace.extractSubpatch() } }
                         Button("Ungroup") { workspace.ungroup(id) }
                     } else {
                         sectionLabel("PATCH")

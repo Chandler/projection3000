@@ -2,7 +2,33 @@
 
 All routes except `/health` require `Authorization: Bearer <local token>`. The supplied `scripts/patchctl.py` client reads the token automatically. The listener binds to loopback and closes each HTTP connection after one response. Requests are capped at 2 MiB, headers at 16 KiB, with an 8-second deadline. `Content-Length` bodies are supported; chunked request bodies are not.
 
-Query `/v1/schema` rather than hard-coding node parameter names. IDs are UUID strings. Input and output ports are zero-based; omit `output` to use port 0.
+Read node definitions from `GET /v1/schema`. Node IDs are UUID strings. Port IDs are case-sensitive strings.
+
+## Ports, parameters and detached editing
+
+`GET /v1/catalog` returns installed node definitions. Sockets declare an `id`, display `name`, signal `type`, and display order. `GET /v1/nodes/{uuid}/ports` returns an instance’s available sockets, connections, and latest observations keyed by output ID. For a subpatch, it returns the published interface.
+
+Use `inputID` and `outputID` in graph commands. Omitting a socket selects the first available port for that direction. `connect`, `disconnect`, `modulate`, and `publish` reject numeric port selectors. In version 2 project JSON, each cable stores its own UUID, the `source` and `target` node UUIDs, and both socket IDs. Control bindings store the source socket’s `outputID`. Patch requires version 2 when opening or replacing a graph.
+
+`POST /v1/connections/options` accepts `{"node":"NODE_UUID","direction":"output","portID":"Field"}`. It lists compatible catalog entries, socket IDs, and parameter keys using the canvas picker’s compatibility rules. Use direction `input` to find producers. The catalog also reports library loading issues.
+
+Parameters declare `valueKind`, range, initial value, MIDI eligibility, and applicable choices, increment and unit. A `parameter` command accepts a number or the exact label of a declared choice. Connected controls and MIDI use the parameter’s declared increment.
+
+To build a separate tree, send one ordinary graph transaction with fresh node IDs and connections among those nodes. A cable to an occupied input replaces its existing cable. Leave that final connection out until the tree is ready. Device and publication nodes have their own activation semantics. Sources that need no physical output can feed Render Field, the canvas preview, or a snapshot. A first snapshot of a newly compiled shader can report “No rendered frame” while Metal prepares it. Retry after compilation.
+
+```json
+{"op":"connect","source":"FIELD_UUID","outputID":"Field","target":"MIX_UUID","inputID":"A"}
+{"op":"modulate","source":"LFO_UUID","outputID":"Control","target":"MIX_UUID","key":"mix"}
+{"op":"connect","source":"MIX_UUID","outputID":"Field","target":"RENDER_UUID","inputID":"Field"}
+```
+
+## Fields
+
+A Field is RGB sampled in normalized XY coordinates. Field Mix accepts two fields and a mix parameter. Its floating-point RGB surface retains values above one at the project resolution. Render Field produces a video frame at the project canvas dimensions. LED Matrix samples fields on its display grid. Cellular Automata exposes `gridColumns` and `gridRows`. At zero, automatic sizing uses the first directly connected LED Matrix in document order or a 320-column canvas-aspect grid. Each consumer samples the same simulation.
+
+Install a custom field through `POST /v1/effects` with `kind: "fieldShader"`, a name, Metal source, and an optional ordered `parameters` array. Each declaration has a unique `key`, `title`, `min`, `max`, and `initial`; optional fields include `choices`, `step`, `midi`, and `unit`. The node instance saves its declaration. A standalone `add` command can supply `kind: "fieldShader"`, `file`, and `fieldParameters` directly. With a `catalogID`, Patch takes the declaration from that catalog entry.
+
+The Metal entry point is `float3 animation(float2 uv, float time, float4 a, float4 b, float4 c, float4 d)`. Up to fifteen declared values occupy the four vectors in order, starting at `a.x`. The final lane `d.w` carries the field time in seconds. By default this is transport time. A single parameter can declare `scalesFieldTime: true` to multiply transport time before delivery to both `time` and `d.w`.
 
 ## Graph commands
 
@@ -13,13 +39,14 @@ Query `/v1/schema` rather than hard-coding node parameter names. IDs are UUID st
 Returns `{"id":"..."}`. Optional fields: `id` (caller-supplied UUID for transactions), `name`, `x`, `y`, `file`, `text`, `deviceID`, `parameters`.
 
 ```json
-{"op":"connect","source":"SOURCE_UUID","target":"TARGET_UUID","input":0}
-{"op":"disconnect","target":"TARGET_UUID","input":0}
+{"op":"connect","source":"SOURCE_UUID","outputID":"Video","target":"TARGET_UUID","inputID":"Video"}
+{"op":"disconnect","target":"TARGET_UUID","inputID":"Video"}
+{"op":"publish","id":"AB_UUID","outputID":"Collection","mode":"on"}
 {"op":"parameter","id":"NODE_UUID","key":"scanlines","value":0.4}
 {"op":"update","id":"NODE_UUID","name":"Screen","enabled":true,"x":600,"y":160}
 {"op":"update","id":"NODE_UUID","file":"/absolute/movie.mp4"}
 {"op":"remove","id":"NODE_UUID"}
-{"op":"replace","graph":{"version":1,"width":1280,"height":720,"fps":60,"nodes":[],"edges":[]}}
+{"op":"replace","graph":{"version":2,"width":1280,"height":720,"fps":60,"nodes":[],"edges":[]}}
 ```
 
 `text` sets a Text node’s multiline content. `deviceID` selects a Camera by AVFoundation unique ID; null uses the default camera. These fields are accepted by add and update. `file: null` clears a media/shader/audio path. Removing a node removes its cables. Replacing an input connection is atomic. The graph rejects cycles, incompatible port types, duplicate UUIDs, dangling cables, duplicate input connections, unknown parameters, out-of-range values, noninteger choice values, invalid render settings, and more than 200 nodes.
@@ -32,7 +59,7 @@ An array of graph commands is one atomic operation:
 [
   {"op":"add","kind":"lorenz","id":"00000000-0000-4000-8000-000000000001","x":80,"y":140},
   {"op":"add","kind":"render","id":"00000000-0000-4000-8000-000000000002","x":370,"y":140},
-  {"op":"connect","source":"00000000-0000-4000-8000-000000000001","target":"00000000-0000-4000-8000-000000000002"}
+  {"op":"connect","source":"00000000-0000-4000-8000-000000000001","outputID":"Geometry","target":"00000000-0000-4000-8000-000000000002","inputID":"Geometry"}
 ]
 ```
 
@@ -99,7 +126,7 @@ Errors return non-200 JSON containing `error`. Invalid commands use 400; missing
 
 ### Face coordinates
 
-`faceDetect` takes video and produces a `faces` port. Its `rate` parameter is the maximum detection FPS (1–60, default 30). `faceBoxes` accepts video on input 0 and faces on input 1, outputs video, and has `thickness` (1–12 pixels, default 3).
+`faceDetect` takes video and produces a `faces` port. Its `rate` parameter is the maximum detection FPS (1–60, default 30). `faceBoxes` accepts video on `Video` and face detections on `Faces`, outputs video, and has `thickness` (1–12 pixels, default 3).
 
 State includes `faceDetections[detectorUUID]` with `{sequence, timestamp, width, height, inferenceMS, faces}`. Each face has `{bounds: {x,y,width,height}, confidence, landmarks: {regionName: [{x,y}]}}`. Bounds and landmarks use full-canvas normalized coordinates with top-left origin, including all upstream transforms. `timestamp` is monotonic host seconds at frame submission, not wall time or transport time. Consumers reuse the latest asynchronously completed detection. Face array indices are not stable identities. An empty array means no faces; an absent detector key means disabled, disconnected, awaiting a result, failed, or stale. Consult node status for that distinction.
 
@@ -107,8 +134,8 @@ State includes `faceDetections[detectorUUID]` with `{sequence, timestamp, width,
 
 ### Human poses
 
-- `yoloPose`: video input 0 → `poses` output 0. Parameters: `rate` (1–60, default 30), `confidence` (0.05–0.95, default 0.3), `iou` (0.1–0.9, default 0.45). Optional `file` points to a compatible compiled Core ML model; otherwise uses the model installed by `scripts/setup-pose.sh`.
-- `poseRender`: `poses` input 0 → video output 0. Parameters: `confidence` (0.05–0.95, default 0.3), `thickness` (1–16, default 4), `joints` (0/1), `color` (0 white / 1 colored limbs), `background` (0 black / 1 white). The default enables joint dots and colored limbs.
+- `yoloPose`: `Video` input → `Poses` output. Parameters: `rate` (1–60, default 30), `confidence` (0.05–0.95, default 0.3), `iou` (0.1–0.9, default 0.45). Optional `file` points to a compatible compiled Core ML model; otherwise uses the model installed by `scripts/setup-pose.sh`.
+- `poseRender`: `Poses` input → `Video` output. Parameters: `confidence` (0.05–0.95, default 0.3), `thickness` (1–16, default 4), `joints` (0/1), `color` (0 white / 1 colored limbs), `background` (0 black / 1 white). The default enables joint dots and colored limbs.
 - `/v1/state.poseDetections[nodeID]`: `{sequence,timestamp,width,height,inferenceMS,poses:[{bounds:{x,y,width,height},confidence,keypoints:[{x,y,confidence}]}]}`. Coordinates use normalized top-left canvas space. Keypoint order is `/v1/schema.poseKeypoints` (COCO 17); identities/order are not tracked across frames. A successful no-person inference publishes an empty array; unavailable, disabled or stale analysis has no entry.
 - Pose cables are type-checked. The detector's stick-figure preview is diagnostic, not a second video output. Use `poseRender` to turn the data into video.
 
@@ -118,7 +145,7 @@ Video `file` accepts MKV paths without conversion by the caller. Video and audio
 
 ### Crop / Aspect
 
-`crop`: video input 0 → video output 0. `aspect`: 0 Input, 1 Free, 2 16:9, 3 9:16, 4 1:1, 5 4:3, 6 3:4, 7 4:5, 8 21:9, 9 Custom. Custom uses `ratioWidth`/`ratioHeight` (1–32). `zoom` is 1–8, `x`/`y` are 0–1 pan fractions (0.5 centered), `width`/`height` are 0.05–1 for Free. `fit`: 0 Fit, 1 Fill, 2 Stretch. `background`: 0 Black, 1 White. `flipX`/`flipY`: 0/1. `resolution`: 0 match input long edge, 1 720 short edge, 2 1080 short edge, 3 2160 short edge, 4 custom `outputWidth`/`outputHeight`. Output dimensions follow the selected crop aspect (or custom pixels), are even, and capped at 8192 per axis. Downstream effects inherit input A dimensions; recording uses incoming dimensions. Changing size finishes an active take.
+`crop`: `Video` input → `Video` output. `aspect`: 0 Input, 1 Free, 2 16:9, 3 9:16, 4 1:1, 5 4:3, 6 3:4, 7 4:5, 8 21:9, 9 Custom. Custom uses `ratioWidth`/`ratioHeight` (1–32). `zoom` is 1–8, `x`/`y` are 0–1 pan fractions (0.5 centered), `width`/`height` are 0.05–1 for Free. `fit`: 0 Fit, 1 Fill, 2 Stretch. `background`: 0 Black, 1 White. `flipX`/`flipY`: 0/1. `resolution`: 0 match input long edge, 1 720 short edge, 2 1080 short edge, 3 2160 short edge, 4 custom `outputWidth`/`outputHeight`. Output dimensions follow the selected crop aspect (or custom pixels), are even, and capped at 8192 per axis. Downstream effects inherit input A dimensions; recording uses incoming dimensions. Changing size finishes an active take.
 
 `{"op":"record_discard","id":"…"}` discards a ready/failed unsaved take and clears its runtime state. It rejects recording, finishing and saved takes, and never removes an exported copy. Like `record_save`, it is a standalone command, not an atomic graph transaction.
 
@@ -128,26 +155,26 @@ Video `file` accepts MKV paths without conversion by the caller. Video and audio
 
 `channelColors` is a single-input video effect that redraws the input's R, G and B channels as three colors. `color0`–`color2` are packed sRGB `0xRRGGBB` integers (defaults red, green, blue), `level0`–`level2` are 0–2, `channels` is 0 All / 1 Red / 2 Green / 3 Blue, `blend` is 0 Add / 1 Screen, and `mix` is 0–1.
 
-`pictureInPicture` accepts A at input 0 and B at input 1. `width/height` are canvas fractions; `x/y` place the inset within the available space (0 left/top, 1 right/bottom). `fit`: 0 fit, 1 fill, 2 stretch. `opacity`, `radius` and `border` (pixels), and `shadow` set its finish. `lock` controls interactive proportional resizing.
+`pictureInPicture` accepts video on inputs `A` and `B`. `width/height` are canvas fractions; `x/y` place the inset within the available space (0 left/top, 1 right/bottom). `fit`: 0 fit, 1 fill, 2 stretch. `opacity`, `radius` and `border` (pixels), and `shadow` set its finish. `lock` controls interactive proportional resizing.
 
 ### LED Matrix and Fields
 
-`dataStream` emits the `field` port type. Its external Metal function has signature `float3 animation(float2 uv, float time, float4 a, float4 b, float4 c, float4 d)`; controls are documented in `User Nodes/Data Stream.metal`. `pattern`: 0 packets, 1 waves, 2 drifting mask, 3 staggered pulses. It does not allocate a video texture. `ledMatrix` accepts video at input 0 or field at input 1; a connected enabled field takes precedence and is evaluated directly at each cell center. Ordinary video can use center or five-point cell sampling. Fields use the project canvas dimensions unless a video input establishes another stream size. Query schema for matrix and driver parameters and modulation targets.
+`dataStream` emits the `field` port type. Its external Metal function has signature `float3 animation(float2 uv, float time, float4 a, float4 b, float4 c, float4 d)`; controls are documented in `User Nodes/Data Stream.metal`. `pattern`: 0 packets, 1 waves, 2 drifting mask, 3 staggered pulses. It does not allocate a video texture. `ledMatrix` accepts video on `Video` or a field on `Field`; a connected enabled field takes precedence and is evaluated directly at each cell center. Ordinary video can use center or five-point cell sampling. Fields use the project canvas dimensions unless a video input establishes another stream size. Query schema for matrix and driver parameters and modulation targets.
 
-`ledMatrix` input 2 is now `Light` (`field`). The composition is primary Field (input 1, taking precedence over Video input 0) multiplied by Light input 2. Each field has an independent `speed` clock. `streakGlow` (title Glow) emits `field` with `function` (0 Streaks, 1 Gaussian noise, 2 Lava lamp, 3 Clouds, 4 Ripples, 5 Sweep, 6 Plasma, 7 Breathe), `speed`, `mode`, `invert`, `depth`, `scale`, `gain`, `detail`, `warp`, `contrast`, `angle` (degrees, 90 = up), `stretch`, `bias`, `pulse` and `seed`. Its function is built in, not an external file. `lightField` was removed; saved nodes of that kind load as `streakGlow`. Both field functions are namespaced and compiled into one matrix shader; no intermediate video textures are allocated.
+`ledMatrix` accepts a second field on `Light`. With a primary `Field` connected, the matrix evaluates that field in place of `Video`. A connected `Light` multiplies the result. Each field has an independent `speed` clock. `streakGlow` (title Glow) emits `field` with `function` (0 Streaks, 1 Gaussian noise, 2 Lava lamp, 3 Clouds, 4 Ripples, 5 Sweep, 6 Plasma, 7 Breathe), `speed`, `mode`, `invert`, `depth`, `scale`, `gain`, `detail`, `warp`, `contrast`, `angle` (degrees, 90 = up), `stretch`, `bias`, `pulse` and `seed`. Its function is built in, not an external file. Both field functions are namespaced and compiled into one matrix shader; no intermediate video textures are allocated.
 
-`blockerField` emits `field` and can connect to LED Matrix input 1. Its `rate` is widths per second, `segments` launches per second, `tail` stream duty, `density` launch probability, `variance` row-speed variation, `depth` blocking strength, `blockers` count, `motion` blocker movement, `height` height in rows, and `jitter`/`refresh` signal brightness jitter. `speed`, `rows` and `seed` set playback, row count and deterministic pattern. Obstruction states are sampled at retarded passage times, creating advected downstream gaps rather than a screen-space mask.
+`blockerField` emits `field` and can connect to the LED Matrix `Field` input. Its `rate` is widths per second, `segments` launches per second, `tail` stream duty, `density` launch probability, `variance` row-speed variation, `depth` blocking strength, `blockers` count, `motion` blocker movement, `height` height in rows, and `jitter`/`refresh` signal brightness jitter. `speed`, `rows` and `seed` set playback, row count and deterministic pattern. Obstruction states are sampled at retarded passage times, creating advected downstream gaps rather than a screen-space mask.
 
 ## MUX
 
-`kind:"ab"` accepts video or collection on inputs 0 and 1. Output 0 remains the
-video preview; output 1 publishes a collection recipe that preserves individual
-faces. Publish output 1 for a VJ Patch Collection clip. Video inputs become
+`kind:"ab"` accepts video or collection on inputs `A` and `B`. The `Video` output carries the
+preview. The `Collection` output carries a collection recipe that preserves individual
+faces. Publish `Collection` for a VJ Patch Collection clip. Video inputs become
 surface fills, and collection inputs retain their per-face sources. `mix` fades
 from A (0) to B (1); `mode:1` cuts at the midpoint. Apply video effects such as
 Dither before each Video Collection input to process every face independently.
 
-`kind:"mux"` has eight optional video inputs (indices 0–7) and one video output.
+`kind:"mux"` has eight optional video inputs (`Video 1` through `Video 8`) and one `Video` output.
 `level1` through `level8` range from 0 to 1; `followAPC` is 0 or 1. The additive
 mix uses the project canvas, aspect-fits each input, and clips at white.
 
@@ -201,7 +228,7 @@ changes the hue or changes which colors the upstream extractor selects.
 
 ### Glow Faces and Lightning Pulses
 
-`glowFaces` takes a `palette` on input 0 and publishes a `collection` recipe.
+`glowFaces` takes a `palette` on its `Palette` input and publishes a `collection` recipe.
 The destination supplies the faces. Colors repeat in face order; `brightness`
 (0–1, default .7), `center_glow` (0–1, default 1), and `falloff` (.25–6, default
 1.5) preserve Composer's Glow Faces profile. Without a palette, packed sRGB
@@ -209,8 +236,8 @@ The destination supplies the faces. Colors repeat in face order; `brightness`
 Connected palette gaps hold the most recent colors; they do not select a theme.
 The three performance controls support MIDI, modulation and `parameter` commands.
 
-`lightningPulses` takes `palette` on input 0 and optional normalized `control`
-phase on input 1. Its output is `trace`, available through `/v1/outputs` and the
+`lightningPulses` takes a palette on `Palette` and optional normalized control
+on `Phase`. Its output is `trace`, available through `/v1/outputs` and the
 VJ Patch library. The recipe includes `kind: lightningPulses`, `params`, `time`,
 `phaseDriven`, `paletteConnected`, and ordered `colors`. Phase times `cycle`
 (default 4 seconds) replaces the free-running clock. The destination supplies
@@ -356,17 +383,17 @@ not part of graph transactions. Live-output protection requires
 
 ```json
 {"op":"add","kind":"apc40"}
-{"op":"modulate","source":"APC_UUID","output":4,"target":"FACES_MUX_UUID","key":"level1","minimum":0,"maximum":1}
+{"op":"modulate","source":"APC_UUID","outputID":"Fader 5","target":"FACES_MUX_UUID","key":"level1","minimum":0,"maximum":1}
 {"op":"parameter","id":"FACES_MUX_UUID","key":"channels","value":2}
 {"op":"frame"}
 ```
 
-`modulate.output` defaults to 0 for old graphs and clients. The canvas displays
+`modulate.outputID` selects the source control, such as `Fader 5` or `Crossfader`. The canvas displays
 these connections at their actual controller ports; drag a port onto a node to
 choose a continuous parameter. Audio parameters support the same ports.
 
 Both `mux` and `layerMux` have an integer `channels` parameter, 1–8, default 8
-for existing graphs. Input ports, rendering and the inspector use this count.
+for new nodes. Input ports, rendering and the inspector use this count.
 Disconnect inputs and level modulations above the desired count before reducing
 it. `frame` fits the current graph in the editor without rearranging it.
 
@@ -392,10 +419,10 @@ WebP playback is not supported by the Image node; it displays the first frame.
 
 ### Palette extraction from collections
 
-`videoPalette` accepts video or collection on input 0. A collection connection
+`videoPalette` accepts video or collection on its `Video` input. A collection connection
 samples its rendered preview, including active A/B branches, Video Collection
-photos, and MUX layer levels. Connect MUX Layers (output 0) to sample its combined
-appearance; MUX Video (output 1) continues to contain only its video inputs.
+photos, and MUX layer levels. Connect Layer Mux’s `Layers` output to sample its combined
+appearance. Its `Video` output contains the video inputs.
 Collection sampling remains active when node previews are closed. Existing
 extraction rate, smoothing, and color-count controls apply.
 
@@ -420,8 +447,7 @@ currently demanded.
 `cellularStep` kernel. Connect it to LED Matrix **Field** to drive the LEDs, or
 **Light** to block an existing Video/Field signal. Dark blockers is the default;
 Lit cells reverses the mask. The matrix retains control of hue, LED shape, and
-spacing. Each connected matrix has its own simulation matching its derived
-columns/rows, including Even spacing.
+spacing. Each connected matrix samples the same simulation at its display grid.
 
 Parameters (also available in the inspector and MIDI/modulation metadata):
 
@@ -444,7 +470,7 @@ Rule, density, seed, cyclic-state count, and matrix-grid changes reset the
 simulation. The inspector's Reseed action increments `seed`. Global transport
 pause freezes evolution. Other parameters update without reseeding. Four-neighbor
 mode changes the neighborhood used by the selected rule; default Life uses eight.
-Two private RGBA16F textures store one texel per LED, with no CPU readback and no
+Two private RGBA16F textures store one texel per simulation cell, with no CPU readback and no
 full-resolution simulation pass. Catch-up is limited to four generations per
 rendered frame. Hidden/inactive branches do not run. Simulation state is transient;
 parameters and connections are saved in the graph.
@@ -459,8 +485,8 @@ pipeline before committing.
 ## Graph Cloud Particles
 
 `graphCloudParticles` is a separate collection effect; `graphClouds` retains its
-original strip renderer. Both accept Palette on input 0 and publish a collection
-on output 0. The particle variant uses independent, overlapping density particles
+original strip renderer. Both accept a palette on `Palette` and publish a collection
+on `Collection`. The particle variant uses independent, overlapping density particles
 following a cubic B-spline route through the destination graph. Positions, radii
 and orientation vary continuously, without connecting segments or tangent-aligned
 texture coordinates.
@@ -484,8 +510,20 @@ the projector blends overlapping colors by density.
 
 Audio File (`audio`), Audio Input (`audioInput`), Audio Gain / Pan (`audioGain`), and Audio Output (`audioOutput`) expose `channelMode`: 0 Stereo (default), 1 Left → both, 2 Right → both, 3 Mute left, 4 Mute right, 5 Swap left/right, 6 Mono mix (average). Channel selection precedes gain/pan on gain and output nodes. Right → both ignores the left source and copies the right sample to both output channels at its original level. The inspector uses a menu; the parameter is also MIDI-assignable.
 
-Audio sources and processors expose Stereo / XY, X / Left, and Y / Right ports. Separate outputs duplicate their selected channel to both sides. Voltage Encoder keeps XY Audio at output 0 and Draw Rate at 1, with X and Y at 2 and 3. Video keeps Video at 0 and Stereo Audio at 1, with X / Left and Y / Right at 2 and 3. The Voltage Visualizer keeps XY Audio at input 0 and Draw Rate at 1, with X and Y at 2 and 3. A separate axis overrides that channel of the combined input; an axis with neither connection is zero. Existing stereo cables retain their indices.
+Audio sources and processors expose `Stereo / XY`, `X / Left`, and `Y / Right`. Separate outputs duplicate the selected channel to both sides. Voltage Encoder exposes `XY Audio`, `Draw Rate`, `X`, and `Y`. Video exposes `Video`, `Stereo Audio`, `X / Left`, and `Y / Right`. Voltage Visualizer accepts `XY Audio`, `Draw Rate`, `X`, and `Y`. A separate axis overrides that channel of the combined input. An axis with neither connection is zero.
 
 ## Audio EQ / Balance
 
 `audioEQ` has one stereo audio input plus stereo, X/Left, and Y/Right outputs. `bass`, `mid`, and `treble` are gentle tone bands (−18…+18 dB) with 200 Hz and 4 kHz crossovers; all zero is flat. `balance` ranges from −1 (left only) through 0 (center) to +1 (right only). `leftGain` and `rightGain` trim each side (−60…+12 dB), and `gain` sets output level. `muteLeft` and `muteRight` silence their respective outputs. `channelMode` selects the source channels before EQ; choose 2 for Right → both. Gain changes smooth over 10 ms. Disabling the node bypasses it. The inspector offers sliders, exact numeric values, and zero buttons.
+
+### Subpatches
+
+Use `subpatch_extract` with `nodes` (an array of member UUIDs) or `id` (an existing component), and an optional `name`. Extraction returns the component ID. Existing cables, modulation and hardware mappings retain their targets. Use `update` with a component `id` and `name` to rename an instance. The component's `interface` in `GET /v1/state` contains ordered `ports`, exposed `parameters`, and an optional preview member UUID.
+
+`connect` and `disconnect` accept a subpatch UUID as an endpoint. Supply the public port UUID in `inputID` or `outputID`. For `parameter`, `modulate`, and `unmodulate`, supply the public parameter UUID in `key`. A public endpoint keeps its UUID when renamed or reassigned. Submit `subpatch_interface` with `id` and the complete edited `interface` to rename, reorder, expose, hide, or reassign endpoints. Each public port declares its direction, type, member UUID and member port ID. Reassigning an endpoint moves its external wires atomically. Remove a connected port after disconnecting its external wires.
+
+`GET /v1/subpatches/{id}` returns a versioned `template` and the graph revision. Use `subpatch_instance` with a source subpatch `id` or an exported `template`, plus optional `x` and `y`. Each instance receives fresh member and cable IDs and keeps the public endpoint IDs. Copies include the selected controls' current base settings, member configurations and internal modulation. External drivers and cables belong to the source graph. Media and user shaders retain their file references. Templates carry MIDI bindings. Set `includeMIDI:true` when instantiating to apply them to fresh member IDs. Conflicting hardware assignments fail the transaction.
+
+Instances open detached by default. Patch pauses copied output nodes, microphones, cameras, hardware audio and MIDI inputs, NDI inputs, and live streams. Copied publications start hidden and MUX hardware following starts off. Set `enableOutputs:true` to retain their saved states. An APC40 node reserves its device even when paused, so importing one requires this option. The template and original graph retain all saved settings.
+
+On the canvas, extract a selection or convert an existing component. The inspector provides public port names and destinations, exposed controls, preview selection, **New Instance**, and JSON export. **Insert Subpatch…** imports that JSON into another composition.

@@ -19,8 +19,7 @@ public struct MIDIMapping: Codable, Equatable, Identifiable, Sendable {
     public func value(_ raw: Int,spec: ParameterSpec) -> Double {
         let fraction = Double(Swift.max(0,Swift.min(127,raw)))/127
         let value = minimum+(maximum-minimum)*(inverted ? 1-fraction : fraction)
-        let quantized = spec.step.map { $0 > 0 ? (value/$0).rounded()*$0 : value } ?? value
-        return Swift.min(spec.max,Swift.max(spec.min,quantized))
+        return spec.quantized(value)
     }
 }
 

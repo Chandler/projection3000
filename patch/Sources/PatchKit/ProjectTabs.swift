@@ -77,7 +77,7 @@ extension AppController {
         if let tab=root.openTabs.first(where:{ $0.workspace.fileURL?.standardizedFileURL == url.standardizedFileURL }) {
             root.selectProjectTab(tab); return
         }
-        let graph=try JSONDecoder().decode(Graph.self,from:Data(contentsOf:url)).validated()
+        let graph=try Graph.read(Data(contentsOf:url))
         _ = try root.createTab(snapshot:["graph":try JSONSerialization.jsonObject(with:JSONEncoder().encode(graph)),"file":url.path,"dirty":false,"running":false])
         workspace.remember(url)
     }

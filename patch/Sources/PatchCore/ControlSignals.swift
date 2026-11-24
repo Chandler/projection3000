@@ -1,12 +1,17 @@
 import Foundation
 
 public struct ParameterModulation: Codable, Equatable, Sendable {
-    public var source: UUID
-    public var output: Int?
+    public var source: UUID { didSet { if oldValue != source { outputID = nil } } }
+    public var output: Int? { didSet { if oldValue != output { outputID = nil } } }
+    public var outputID: String?
+    private enum CodingKeys: String, CodingKey { case source, outputID, minimum, maximum, enabled }
     public var outputIndex: Int { output ?? 0 }
     public var minimum: Double
     public var maximum: Double
     public var enabled: Bool
+    public func value(at fraction: Double, spec: ParameterSpec) -> Double {
+        spec.quantized(minimum + (maximum-minimum)*fraction)
+    }
     public init(source: UUID,minimum: Double,maximum: Double,enabled: Bool = true,output: Int = 0) {
         self.output = output == 0 ? nil : output
         self.source = source; self.minimum = minimum; self.maximum = maximum; self.enabled = enabled
@@ -54,7 +59,7 @@ extension NodeKind {
         if self == .text || self == .lorenz || self == .projector { return [] }
         if self == .videoPalette { return parameters.filter { $0.supportsMIDI && $0.choices == nil } }
         if self == .meshGradient { return parameters.filter { $0.supportsMIDI && $0.choices == nil } }
-        let structural: Set<String> = ["channels","channelX","channelY","previewFaces","start","end","seek","seed","columns","rows","octaves","dpi","cell","highlightColor","midtoneColor","shadowColor","backgroundColor"]
+        let structural: Set<String> = ["gridColumns","gridRows","channels","channelX","channelY","previewFaces","start","end","seek","seed","columns","rows","octaves","dpi","cell","highlightColor","midtoneColor","shadowColor","backgroundColor"]
         let dimensions: Set<String> = self == .crop ? ["width","height","ratioWidth","ratioHeight","outputWidth","outputHeight"] : []
         return parameters.filter { $0.choices == nil && !structural.contains($0.key) && !dimensions.contains($0.key) }
     }
@@ -69,6 +74,7 @@ extension Graph {
         var next = self
         if next.nodes[index].modulations == nil { next.nodes[index].modulations = [:] }
         next.nodes[index].modulations![key] = .init(source:source,minimum:minimum ?? spec.min,maximum:maximum ?? spec.max,enabled:enabled,output:output)
+        next.nodes[index].modulations?[key]?.outputID = node(source)?.ports(output:true)[output].id
         self = try next.validated()
     }
 }

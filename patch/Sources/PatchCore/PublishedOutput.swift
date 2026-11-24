@@ -7,17 +7,53 @@ public struct OutputPublication: Codable, Equatable, Sendable {
 }
 public struct PublishedPort: Equatable, Sendable {
     public let nodeID: UUID
-    public let port: Int
+    public let portID: String
+    let hostKey: String
     public let type: PortType
     public let name: String
     public let listed: Bool
     /// Published by hand (⌘S or Published in the inspector), as opposed to an output node publishing itself.
     public let explicit: Bool
-    public var id: String { "patch:\(nodeID.uuidString):\(port)" }
+    public var id: String { "patch:\(nodeID.uuidString):\(hostKey)" }
     /// Hand-published outputs carry their node's name so they can be picked from a Syphon source list.
-    public var streamName: String { explicit ? "\(name) · \(nodeID.uuidString)" : "Patch · \(nodeID.uuidString) · \(port)" }
+    public var streamName: String { explicit ? "\(name) · \(nodeID.uuidString)" : "Patch · \(nodeID.uuidString) · \(hostKey)" }
 }
 extension Node {
+    public var publishablePortIDs: [String] {
+        switch kind {
+        case .apc40: return []
+        case .syphon, .ndi, .window, .projector: return ["Video"]
+        case .publishPalette: return ["Palette"]
+        default: return kind.ports(output:true).map(\.id)
+        }
+    }
+
+    /// These IDs already occur in VJ shows and Syphon stream names. Freeze each
+    /// binding by socket ID. New outputs use the socket ID as their host identity.
+    private static let hostPublicationKeys: [NodeKind:[String:String]] = {
+        var keys: [NodeKind:[String:String]] = [:]
+        let video: [NodeKind] = [
+            .fieldRender, .profileDecoder, .rasterSynth, .chromaDecoder, .voltageVisualizer, .voltageFluid,
+            .oscilloscope, .posterText, .posterComposer, .powerGlitch, .liveStream, .mux, .projectionDots,
+            .shaderEffect, .ledMatrix, .pictureInPicture, .channelSplit, .channelColors, .crop, .poseRender,
+            .faceReplace, .faceBoxes, .scene, .pattern, .image, .text, .webcam, .waveform, .audioVisualizer,
+            .render, .shader, .dither, .halftone, .diffusion, .modulation, .crt, .blend, .color, .ndiIn,
+            .video, .syphon, .ndi, .window, .projector
+        ]
+        for kind in video { keys[kind] = ["Video":"0"] }
+        for kind: NodeKind in [.palette,.videoPalette,.paletteAdjust,.publishPalette] { keys[kind] = ["Palette":"0"] }
+        for kind: NodeKind in [.videoCollection,.glowFaces,.graphInkFlow,.graphParticles,.graphPulse,.graphClouds,.graphCloudParticles,.flashFaces,.surfaceGate] { keys[kind] = ["Collection":"0"] }
+        for kind: NodeKind in [.audioEnvelope,.lfo,.noise] { keys[kind] = ["Control":"0"] }
+        keys[.lightningPulses] = ["Trace":"0"]
+        keys[.meshGradient] = ["Video":"0","Palette":"1"]
+        keys[.ab] = ["Video":"0","Collection":"1"]
+        keys[.layerMux] = ["Layers":"0","Video":"1"]
+        return keys
+    }()
+
+    fileprivate func publicationHostKey(_ portID: String) -> String {
+        Self.hostPublicationKeys[kind]?[portID] ?? "socket."+portID
+    }
     public var publishableTypes: [PortType] {
         if kind == .apc40 { return [] }
         if kind == .syphon || kind == .ndi || kind == .window || kind == .projector { return [.video] }
@@ -31,20 +67,24 @@ extension Node {
 extension Graph {
     /// Includes unlisted ports so a saved consumer survives graph extensions or hiding.
     public var publishablePorts: [PublishedPort] {
-        nodes.flatMap { node in node.publishableTypes.enumerated().compactMap { port, type in
-            guard [.video,.collection,.trace,.palette,.control].contains(type) else { return nil }
-            let publication = node.publications?[String(port)] ?? OutputPublication()
-            let name = publication.name.flatMap { $0.isEmpty ? nil : $0 } ?? (node.name + (node.publishableTypes.count > 1 ? " · " + type.rawValue.capitalized : ""))
-            return PublishedPort(nodeID:node.id,port:port,type:type,name:name,
-                listed:publication.mode == "on" || (publication.mode == "auto" && node.publishesAutomatically),
-                explicit:publication.mode == "on" && !node.publishesAutomatically)
-        } }
+        nodes.flatMap { node -> [PublishedPort] in
+            let ids = node.publishablePortIDs, types = node.publishableTypes
+            return zip(ids,types).compactMap { id,type in
+                guard [.video,.collection,.trace,.palette,.control].contains(type) else { return nil }
+                let publication = node.publications?[id] ?? OutputPublication()
+                let name = publication.name.flatMap { $0.isEmpty ? nil : $0 } ?? (node.name + (types.count > 1 ? " · " + type.rawValue.capitalized : ""))
+                return PublishedPort(nodeID:node.id,portID:id,hostKey:node.publicationHostKey(id),type:type,name:name,
+                    listed:publication.mode == "on" || (publication.mode == "auto" && node.publishesAutomatically),
+                    explicit:publication.mode == "on" && !node.publishesAutomatically)
+            }
+        }
     }
-    public mutating func publish(_ id: UUID, port: Int, mode: String, name: String?) throws {
-        guard ["auto","on","off"].contains(mode), let i = nodes.firstIndex(where: { $0.id == id }),
-              publishablePorts.contains(where: { $0.nodeID == id && $0.port == port }) else { throw GraphError("Invalid published output or mode") }
-        nodes[i].publications = nodes[i].publications ?? [:]
-        nodes[i].publications?[String(port)] = OutputPublication(mode:mode,name:name)
+    public mutating func publish(_ id: UUID, portID: String, mode: String, name: String?) throws {
+        guard ["auto","on","off"].contains(mode), let index = nodes.firstIndex(where: { $0.id == id }),
+              publishablePorts.contains(where: { $0.nodeID == id && $0.portID == portID }) else { throw GraphError("Invalid published output or mode") }
+        var publications = nodes[index].publications ?? [:]
+        publications[portID] = OutputPublication(mode:mode,name:name)
+        nodes[index].publications = publications
     }
 }
 public enum CollectionStyle {

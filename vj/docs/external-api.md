@@ -1708,10 +1708,14 @@ The crossfader hook uses existing grid `set_fader_sync`; MIDI clock uses
 
 ### Typed embedded Patch sources
 
-`GET /api/v1/sources/patch` exposes stable `patch:<node UUID>:<port>` outputs:
-`video`, `collection`, `palette`, `control`. `listed` controls library visibility;
-`available` is live runtime status. `patch_video` and `patch_collection` clips use
-`params.source` as this identity. Collection clips evaluate on mapper collections.
+`GET /api/v1/sources/patch` exposes published video, collection, palette,
+control and trace outputs. Store the returned `id` verbatim in a VJ clip or
+mapping. Its form is `patch:<node UUID>:<publication key>`. The publication key
+remains stable across socket reordering and renaming. Use the separate
+`outputID` field when addressing the socket through the Patch editor API.
+`listed` controls library visibility and `available` reports runtime status.
+`patch_video` and `patch_collection` clips store the published `id` in
+`params.source`. Collection clips evaluate on mapper collections.
 Palette IDs are also accepted by `palette_source` parameters.
 
 `set_clip` accepts a replacement `patchControls` object mapping continuous

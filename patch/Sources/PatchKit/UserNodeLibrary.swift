@@ -9,15 +9,31 @@ struct CatalogNode: Identifiable, Equatable {
     var name: String?
     var controlStyle: String?
     var parameterTitles: [String:String] = [:]
+    var fieldParameters: [ParameterSpec]?
     var parameterSpecs: [ParameterSpec] {
-        (kind == .scene && controlStyle == "metallicPool" ? MetallicPoolStyle.parameters : kind == .shaderEffect && controlStyle == "liquidMetal" ? LiquidMetalStyle.parameters : kind == .shaderEffect && controlStyle == "liquidChrome" ? LiquidChromeStyle.parameters : kind == .shaderEffect && controlStyle == "ferrofluid" ? FerrofluidStyle.parameters : kind == .shaderEffect && controlStyle == "blinds" ? BlindsStyle.parameters : kind.parameters).map { spec in
-            ParameterSpec(spec.key,parameterTitles[spec.key] ?? spec.title,spec.min,spec.max,spec.initial,choices:spec.choices,midi:spec.midi,step:spec.step)
+        (kind == .fieldShader ? (fieldParameters ?? []) : kind == .scene && controlStyle == "metallicPool" ? MetallicPoolStyle.parameters : kind == .shaderEffect && controlStyle == "liquidMetal" ? LiquidMetalStyle.parameters : kind == .shaderEffect && controlStyle == "liquidChrome" ? LiquidChromeStyle.parameters : kind == .shaderEffect && controlStyle == "ferrofluid" ? FerrofluidStyle.parameters : kind == .shaderEffect && controlStyle == "blinds" ? BlindsStyle.parameters : kind.parameters).map { spec in
+            spec.withTitle(parameterTitles[spec.key] ?? spec.title)
+        }
+    }
+    func matches(_ query: String) -> Bool {
+        let words = query.lowercased().split(whereSeparator:\.isWhitespace)
+        return words.allSatisfy { word in
+            if word.hasPrefix("in:") || word.hasPrefix("out:") {
+                let output = word.hasPrefix("out:")
+                let value = String(word.dropFirst(output ? 4 : 3))
+                let requested = PortType.allCases.first { $0.rawValue.lowercased() == value }
+                return kind.ports(output:output).contains { port in
+                    if let requested { return output ? port.type == requested : port.type.accepts(requested) }
+                    return value.isEmpty || port.type.rawValue.lowercased().contains(value) || port.name.localizedCaseInsensitiveContains(value)
+                }
+            }
+            return title.localizedCaseInsensitiveContains(String(word)) || category.localizedCaseInsensitiveContains(String(word))
         }
     }
     var id: String { file?.path ?? kind.rawValue }
     var title: String { name ?? kind.title }
     var category: String { file == nil ? kind.category : "USER GENERATED" }
-    static var all: [CatalogNode] { NodeKind.allCases.filter { $0 != .posterText && $0 != .meshGradient && $0 != .dotColors && $0 != .flipDots && $0 != .projectionDots && $0 != .scene && $0 != .dataStream && $0 != .blockerField && $0 != .streakField && $0 != .waterfallField && $0 != .cellularField }.map { CatalogNode(kind:$0) } + UserNodeLibrary.shared.entries }
+    static var all: [CatalogNode] { NodeKind.allCases.filter { $0 != .fieldShader && $0 != .posterText && $0 != .meshGradient && $0 != .dotColors && $0 != .flipDots && $0 != .projectionDots && $0 != .scene && $0 != .dataStream && $0 != .blockerField && $0 != .streakField && $0 != .waterfallField && $0 != .cellularField }.map { CatalogNode(kind:$0) } + UserNodeLibrary.shared.entries }
 }
 struct UserNodeFolder: Identifiable, Equatable {
     var url: URL
@@ -26,7 +42,7 @@ struct UserNodeFolder: Identifiable, Equatable {
     var id: String { url.path }
     var entries: [CatalogNode] { nodes + folders.flatMap(\.entries) }
     func matches(_ query: String) -> Bool {
-        query.isEmpty || url.lastPathComponent.localizedCaseInsensitiveContains(query) || nodes.contains { $0.title.localizedCaseInsensitiveContains(query) } || folders.contains { $0.matches(query) }
+        query.isEmpty || url.lastPathComponent.localizedCaseInsensitiveContains(query) || nodes.contains { $0.matches(query) } || folders.contains { $0.matches(query) }
     }
 }
 final class UserNodeLibrary: ObservableObject {
@@ -49,13 +65,30 @@ final class UserNodeLibrary: ObservableObject {
     static var waterfallFieldURL: URL { sourceURL("Waterfall Ribbon.metal") }
     static var streakFieldURL: URL { sourceURL("Moving Streaks.metal") }
     static var blockerFieldURL: URL { sourceURL("Flow Blockers.metal") }
+    @Published private(set) var diagnostics: [String] = []
     @Published private(set) var entries: [CatalogNode] = []
     @Published private(set) var root = UserNodeFolder(url:UserNodeLibrary.directory)
     private var timer: Timer?
     private var scanning = false
     private var rescanRequested = false
     private var refreshCallbacks: [() -> Void] = []
-    private struct Metadata: Decodable { let name: String; let file: String; let kind: NodeKind?; let parameterTitles: [String:String]?; let controlStyle: String? }
+    private struct Metadata: Decodable {
+        let name: String
+        let file: String
+        let kind: NodeKind?
+        let parameterTitles: [String:String]?
+        let controlStyle: String?
+        let parameters: [ParameterSpec]?
+        var fieldParameters: [ParameterSpec]? {
+            guard kind == .fieldShader else { return nil }
+            return (parameters ?? []).map { $0.withTitle(parameterTitles?[$0.key] ?? $0.title) }
+        }
+    }
+    private static let fileKinds: Set<NodeKind> = [
+        .profileEncoder, .rasterSynth, .meshGradient, .dotColors, .flipDots, .projectionDots,
+        .shader, .shaderEffect, .fieldShader, .scene, .dataStream, .blockerField, .streakField,
+        .waterfallField, .cellularField
+    ]
     init() {
         try? FileManager.default.createDirectory(at:Self.directory,withIntermediateDirectories:true)
         refresh()
@@ -66,6 +99,7 @@ final class UserNodeLibrary: ObservableObject {
         if let completion { refreshCallbacks.append(completion) }
         guard !scanning else { rescanRequested = true; return }; scanning = true
         DispatchQueue.global(qos:.utility).async {
+            var diagnostics: [String] = []
             func scan(_ directory: URL, bundled: URL?) -> UserNodeFolder {
                 func contents(_ url: URL?) -> [URL] {
                     guard let url else { return [] }
@@ -78,9 +112,29 @@ final class UserNodeLibrary: ObservableObject {
                 var metadata: [String:Metadata] = [:]
                 var retired: Set<String> = []
                 for url in files where url.pathExtension.lowercased() == "json" {
-                    if let data = try? Data(contentsOf:url), let item = try? JSONDecoder().decode(Metadata.self,from:data), item.kind == nil || item.kind == .profileEncoder || item.kind == .rasterSynth || item.kind == .meshGradient || item.kind == .dotColors || item.kind == .flipDots || item.kind == .projectionDots || item.kind == .shader || item.kind == .shaderEffect || item.kind == .scene || item.kind == .dataStream || item.kind == .blockerField || item.kind == .streakField || item.kind == .waterfallField || item.kind == .cellularField { metadata[item.file] = item }
-                    // Glow is built in; older Streak Glow / Light Field library files are hidden.
-                    else if let data = try? Data(contentsOf:url), let item = try? JSONDecoder().decode(Metadata.self,from:data), item.kind == .streakGlow { retired.insert(item.file) }
+                    let sibling = url.deletingPathExtension().lastPathComponent+".metal"
+                    var referencedFile = byName[sibling] == nil ? nil : sibling
+                    do {
+                        let data = try Data(contentsOf:url)
+                        // Presets and other JSON data can live beside shader manifests.
+                        guard let object = try JSONSerialization.jsonObject(with:data) as? [String:Any],
+                              let file = object["file"] as? String else {
+                            if referencedFile != nil { throw GraphError("Missing shader file") }
+                            continue
+                        }
+                        referencedFile = file
+                        let item = try JSONDecoder().decode(Metadata.self,from:data)
+                        if item.kind == .streakGlow { retired.insert(file); continue }
+                        if let kind = item.kind, !Self.fileKinds.contains(kind) { throw GraphError("Unsupported shader kind "+kind.rawValue) }
+                        if let specs = item.fieldParameters { try ParameterSpec.validateShaderParameters(specs) }
+                        if metadata[file] != nil { throw GraphError("Multiple manifests name "+file) }
+                        metadata[file] = item
+                    } catch {
+                        if let file = referencedFile {
+                            retired.insert(file)
+                            diagnostics.append(url.lastPathComponent+" · "+error.localizedDescription)
+                        }
+                    }
                 }
                 var folder = UserNodeFolder(url:directory)
                 for url in files {
@@ -89,7 +143,7 @@ final class UserNodeLibrary: ObservableObject {
                         if values?.isSymbolicLink != true { folder.folders.append(scan(directory.appendingPathComponent(url.lastPathComponent,isDirectory:true),bundled:bundled?.appendingPathComponent(url.lastPathComponent,isDirectory:true))) }
                     } else if url.pathExtension.lowercased() == "metal", !retired.contains(url.lastPathComponent) {
                         let info = metadata[url.lastPathComponent]
-                        folder.nodes.append(CatalogNode(kind:info?.kind ?? .shader,file:url,name:info?.name ?? url.deletingPathExtension().lastPathComponent,controlStyle:info?.controlStyle,parameterTitles:info?.parameterTitles ?? [:]))
+                        folder.nodes.append(CatalogNode(kind:info?.kind ?? .shader,file:url,name:info?.name ?? url.deletingPathExtension().lastPathComponent,controlStyle:info?.controlStyle,parameterTitles:info?.parameterTitles ?? [:],fieldParameters:info?.fieldParameters))
                     }
                 }
                 folder.nodes.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
@@ -98,7 +152,9 @@ final class UserNodeLibrary: ObservableObject {
             }
             let root = scan(Self.directory,bundled:Self.bundledDirectory)
             let entries = root.entries.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+            let issues = diagnostics.sorted()
             DispatchQueue.main.async {
+                if self.diagnostics != issues { self.diagnostics = issues }
                 if self.root != root { self.root = root }
                 if self.entries != entries { self.entries = entries }
                 self.scanning = false
@@ -113,10 +169,16 @@ final class UserNodeLibrary: ObservableObject {
 
 // Resolve labels by shader file, so renaming a node preserves its control names.
 extension Node {
+    var catalogTitle: String {
+        guard let file else { return kind.title }
+        return UserNodeLibrary.shared.entries.first { $0.kind == kind && $0.file?.path == file }?.title ?? kind.title
+    }
+
     var isBlinds: Bool {
         hasBlindsControls || kind == .shaderEffect && UserNodeLibrary.shared.entries.contains { $0.file?.path == file && $0.controlStyle == "blinds" }
     }
     var parameterSpecs: [ParameterSpec] {
+        if kind == .fieldShader { return parameterDefinitions }
         guard let file, let entry = UserNodeLibrary.shared.entries.first(where:{ $0.file?.path == file && $0.kind == kind }) else { return parameterDefinitions }
         return entry.parameterSpecs
     }

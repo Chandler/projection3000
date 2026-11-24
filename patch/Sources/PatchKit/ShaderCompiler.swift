@@ -96,13 +96,14 @@ enum ShaderCompiler {
         """
         return try pipeline(wrapper,function:"customAnimation",device:device)
     }
-    static func matrix(primary: String?, light: String?, primaryCells: Bool = false, lightCells: Bool = false, device: MTLDevice) throws -> MTLComputePipelineState {
+    static func matrix(primary: String?, light: String?, primaryCells: Bool = false, lightCells: Bool = false, lightTexture: Bool = false, device: MTLDevice) throws -> MTLComputePipelineState {
         let url = try PatchResources.shaderURL()
         var code = "#include <metal_stdlib>\nusing namespace metal;\n"
         if primary?.contains("PATCH_FLASH_CELLS") == true { code += "#define MATRIX_FLASH_PRIMARY 1\n" }
         if light?.contains("PATCH_FLASH_CELLS") == true { code += "#define MATRIX_FLASH_LIGHT 1\n" }
         if primaryCells { code += "#define MATRIX_CELL_FIELD 1\n" }
         else if let primary { code += "namespace matrixDriver {\n"+primary+"\n}\n#define MATRIX_FIELD 1\n" }
+        if lightTexture { code += "#define MATRIX_TEXTURE_LIGHT 1\n" }
         if lightCells { code += "#define MATRIX_CELL_LIGHT 1\n" }
         else if let light { code += "namespace matrixLight {\n"+light+"\n}\n#define MATRIX_LIGHT 1\n" }
         code += try String(contentsOf:url)
@@ -142,15 +143,27 @@ enum ShaderCompiler {
             resource.revisionKey = matrixRevision([geometryPath,patternPath]); resource.checked = CACurrentMediaTime()
             result[node.id] = resource
         }
-        for node in graph.nodes where node.kind == .ledMatrix {
+        // Compile standalone custom producers even when a branch has no consumer yet.
+        for node in graph.nodes where node.kind == .fieldShader {
+            guard let input = FieldInput(producer:node) else { throw GraphError("\(node.name): choose a Metal field shader.") }
+            let program = FieldProgram(primary:input,secondary:nil)
+            let resource = ShaderResource("field")
+            resource.fieldProgram = program
+            resource.pipeline = try program.compile(device:device)
+            resource.revisionKey = program.revision; resource.checked = CACurrentMediaTime()
+            result[node.id] = resource
+        }
+        for node in graph.nodes where [.ledMatrix,.fieldRender,.fieldMix].contains(node.kind) {
             func field(_ index: Int) -> Node? {
                 graph.edges.first { $0.target == node.id && $0.input == index }.flatMap { graph.node($0.source) }.flatMap { $0.enabled ? $0 : nil }
             }
-            let primary = field(1).flatMap(sourceURL), light = field(2).flatMap(sourceURL)
-            guard primary != nil || light != nil else { continue }
-            let resource = ShaderResource((primary ?? "video")+"|"+(light ?? "none")); resource.kind = .ledMatrix
-            resource.pipeline = try matrix(primary:primary.map { try String(contentsOfFile:$0) },light:light.map { try String(contentsOfFile:$0) },primaryCells:field(1)?.kind == .cellularField,lightCells:field(2)?.kind == .cellularField,device:device)
-            resource.revisionKey = matrixRevision([primary,light]); resource.checked = CACurrentMediaTime()
+            let a = field(node.kind == .ledMatrix ? 1 : 0), b = field(node.kind == .ledMatrix ? 2 : 1)
+            guard a != nil || b != nil else { continue }
+            let program = FieldProgram(primary:a.flatMap(FieldInput.init(producer:)),secondary:b.flatMap(FieldInput.init(producer:)))
+            let resource = ShaderResource("field")
+            resource.fieldProgram = program
+            resource.pipeline = try program.compile(device:device)
+            resource.revisionKey = program.revision; resource.checked = CACurrentMediaTime()
             result[node.id] = resource
         }
         return result

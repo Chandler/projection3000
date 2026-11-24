@@ -37,9 +37,9 @@ public enum BlindsStyle {
 
 extension Node {
     public var hasBlindsControls: Bool { kind == .shaderEffect && controlStyle == "blinds" }
-    public var parameterDefinitions: [ParameterSpec] { hasMetallicPoolControls ? MetallicPoolStyle.parameters : kind == .audioPlugin ? (plugin?.parameters.map(\.spec) ?? []) : hasLiquidMetalControls ? LiquidMetalStyle.parameters : hasLiquidChromeControls ? LiquidChromeStyle.parameters : hasFerrofluidControls ? FerrofluidStyle.parameters : hasBlindsControls ? BlindsStyle.parameters : kind.parameters }
+    public var parameterDefinitions: [ParameterSpec] { if kind == .fieldShader { return fieldParameters ?? [] }; return hasMetallicPoolControls ? MetallicPoolStyle.parameters : kind == .audioPlugin ? (plugin?.parameters.map(\.spec) ?? []) : hasLiquidMetalControls ? LiquidMetalStyle.parameters : hasLiquidChromeControls ? LiquidChromeStyle.parameters : hasFerrofluidControls ? FerrofluidStyle.parameters : hasBlindsControls ? BlindsStyle.parameters : kind.parameters }
     public var modulationDefinitions: [ParameterSpec] {
-        if kind == .audioPlugin || hasLiquidSculptureControls || hasFerrofluidControls || hasMetallicPoolControls { return parameterDefinitions.filter { $0.supportsMIDI && $0.choices == nil } }
+        if kind == .fieldShader || kind == .audioPlugin || hasLiquidSculptureControls || hasFerrofluidControls || hasMetallicPoolControls { return parameterDefinitions.filter { $0.supportsMIDI && $0.choices == nil } }
         let standard = kind.modulatableParameters.filter { spec in
             guard kind == .mux || kind == .layerMux, spec.key.hasPrefix("level"), let channel = Int(spec.key.dropFirst(5)) else { return true }
             return channel <= channelCount

@@ -11,7 +11,10 @@ struct ModulationInspector: View {
     func update(_ key: String,_ change: (inout ParameterModulation)->Void) {
         workspace.edit("Edit Modulation") { graph in
             guard let i = graph.nodes.firstIndex(where:{ $0.id == id }),var binding = graph.nodes[i].modulations?[key] else { return }
-            change(&binding); graph.nodes[i].modulations?[key] = binding
+            change(&binding)
+            guard let port = graph.node(binding.source)?.ports(output:true).first(where:{ $0.index == binding.outputIndex && $0.type == .control }) else { throw GraphError("Choose a control output") }
+            binding.outputID = port.id
+            graph.nodes[i].modulations?[key] = binding
         }
     }
     var body: some View {
@@ -47,7 +50,6 @@ struct ModulationInspector: View {
                     TimelineView(.periodic(from:.now,by:0.1)) { _ in
                     HStack { Text("CONTROL OUTPUT"); Spacer(); Text((renderer.controlValues[id] ?? 0).formatted(.number.precision(.fractionLength(3)))) }.font(.system(size:10,design:.monospaced))
                     }
-                    Text("Drag the CONTROL output onto a node, then choose a parameter.").font(.system(size:10)).foregroundStyle(.secondary)
                 }
                 if !node.modulationSpecs.isEmpty {
                     HStack {
@@ -65,7 +67,6 @@ struct ModulationInspector: View {
                             }
                         }.disabled(controls.isEmpty)
                     }
-                    if controls.isEmpty { Text("Add LFO, Noise or Audio Envelope to drive parameters.").font(.system(size:10)).foregroundStyle(.secondary) }
                     ForEach((node.modulations ?? [:]).keys.sorted(),id:\.self) { key in
                         if let binding = node.modulations?[key],let spec = node.modulationSpecs.first(where:{ $0.key == key }) {
                             VStack(alignment:.leading,spacing:8) {
@@ -77,6 +78,7 @@ struct ModulationInspector: View {
                                 Picker("Source",selection:Binding(get:{ self.node?.modulations?[key]?.source ?? binding.source },set:{ source in update(key) { $0.source = source; $0.output = nil } })) {
                                     ForEach(controls) { source in Text(source.name).tag(source.id) }
                                 }
+                                Button("Select Driver") { workspace.selected = binding.source }
                                 if let source = workspace.graph.node(binding.source), source.kind.outputs.count > 1 {
                                     Picker("Output",selection:Binding(get:{ self.node?.modulations?[key]?.outputIndex ?? 0 },set:{ output in update(key) { $0.output = output } })) {
                                         ForEach(source.kind.outputs.indices,id:\.self) { output in Text(source.kind.outputs[output]).tag(output) }

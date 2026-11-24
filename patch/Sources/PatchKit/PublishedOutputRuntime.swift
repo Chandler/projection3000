@@ -219,7 +219,7 @@ final class PublishedOutputRuntime {
         for port in ports {
             guard let node=nodes[port.nodeID] ?? graph.node(port.nodeID) else { continue }
             let active=nodes[port.nodeID] != nil
-            var item: [String:Any] = ["id":port.id,"nodeID":port.nodeID.uuidString,"port":port.port,"name":port.name,"type":port.type.rawValue,"listed":port.listed,"available":node.enabled,"active":active]
+            var item: [String:Any] = ["id":port.id,"nodeID":port.nodeID.uuidString,"outputID":port.portID,"name":port.name,"type":port.type.rawValue,"listed":port.listed,"available":node.enabled,"active":active]
             // Catalog entries survive dormancy, without evaluating their graph.
             if !active { result.append(item); continue }
             switch port.type {

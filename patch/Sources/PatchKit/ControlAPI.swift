@@ -97,10 +97,14 @@ final class ControlAPI {
         if let forwarded = try forwardRoute?(method,path,data) { return forwarded }
         if method == "POST", path == "/v1/commands", let c = try JSONSerialization.jsonObject(with:data) as? [String:Any], let result = try tabCommand?(c) { return result }
         if restarting && method != "GET" { throw GraphError("Patch is restarting") }
+        if let result = try portRoute(method,path,data) { return result }
         if let result = try liveRoute(method,path,data) { return result }
         if method == "GET", path == "/v1/outputs" { return ["sources":renderer.publishedOutputs] }
         if method == "GET", path == "/v1/palettes" { return ["sources":paletteSources] }
         if method == "GET", path == "/v1/midi/hooks" { return ["hooks":workspace.midi?.controlHooks ?? [],"graphRevision":revision(),"channelNumbering":"zero-based","editEndpoint":"POST /v1/commands"] }
+        if method == "GET",path.hasPrefix("/v1/subpatches/"),let id = UUID(uuidString:String(path.dropFirst("/v1/subpatches/".count))) {
+            return ["template":try JSONSerialization.jsonObject(with:JSONEncoder().encode(workspace.graph.subpatchTemplate(id))),"graphRevision":revision()]
+        }
         if method == "GET", path == "/v1/state" { return try stateObject() }
         if method == "GET",path.hasPrefix("/v1/voltage/"),path.hasSuffix("/samples") {
             let parts=path.split(separator:"/")
@@ -109,9 +113,9 @@ final class ControlAPI {
             return ["node":id.uuidString,"sampleRate":history.rate,"trailMS":scope.seconds*1000,"drawRate":scope.rate,"count":history.points.count,"sampleStride":1,"points":history.points.map { [$0.x,$0.y] }]
         }
         if method == "GET", path == "/v1/schema" {
-            return ["midiOutputDevices":MIDIOutputDevice.devices.map { ["id":$0.id,"name":$0.name] },"meshPresets":MeshGradientStyle.presets.enumerated().map { ["index":$0.offset,"name":$0.element.name,"source":$0.element.source,"author":$0.element.author] as [String:Any] },"meshDetail":"update.text accepts JSON {paths:{region:[[x,y,hardness]]},stops:{region:[[position,packedRGB,opacity]]}}. Paths use canvas-long-side units relative to the region pivot.","midiHooks":"GET /v1/midi/hooks","liveAPI":["catalog":"GET /v1/catalog","install":"POST /v1/effects","stage":"POST /v1/branches","job":"GET /v1/jobs/{id}","commit":"POST /v1/branches/{id}/commit","protection":"Active output dependencies are protected. Intentional changes require allowLiveChanges:true and expectedRevision."],"microphoneAuthorization":([0:"notDetermined",1:"restricted",2:"denied",3:"authorized"][AVCaptureDevice.authorizationStatus(for:.audio).rawValue] ?? "unknown"),"hardwareAudioDevices":HardwareAudioDevice.devices.map { ["id":$0.id,"name":$0.name,"inputs":$0.inputs,"outputs":$0.outputs] as [String:Any] },"projectorDisplays":NSScreen.screens.map { ["id":$0.patchDisplayID,"name":$0.localizedName] },"audioInputDevices":MicrophoneSource.devices.map { ["id":$0.uniqueID,"name":$0.localizedName] },"userNodeFolder":UserNodeLibrary.directory.path,"userNodes":UserNodeLibrary.shared.entries.map { ["name":$0.title,"kind":$0.kind.rawValue,"file":$0.file!.path] },"poseKeypoints":PosePoint.names,"version":1,"publishedOutputs":"GET /v1/outputs","portTypes":["rgbProfiles","chromaReference","midi","vectorPath","drawRate","visual","trace","collection","video","geometry","audio","faces","poses","field","control","dots","palette"],"nodes":try NodeKind.allCases.map { kind -> [String:Any] in
-                ["midiParameters":kind.parameters.filter(\.supportsMIDI).map(\.key),"modulatableParameters":kind.modulatableParameters.map(\.key),"preview":kind.previewKind.rawValue,"kind":kind.rawValue,"title":kind.title,"category":kind.category,"inputs":kind.inputs.enumerated().map { ["index":$0.offset,"name":$0.element,"type":kind.inputTypes[$0.offset].rawValue] },"outputs":kind.outputTypes.enumerated().map { ["index":$0.offset,"name":kind.outputs[$0.offset],"type":$0.element.rawValue] },"output":kind.outputType?.rawValue as Any? ?? NSNull(),"parameters":try JSONSerialization.jsonObject(with:JSONEncoder().encode(kind.parameters))]
-            }, "apps":"Node apps (Poster Editor…) expose their own operations: GET /v1/apps/{nodeID} lists ops and state; POST /v1/apps/{nodeID} takes {op,…} or {commands:[…]} with the same expectedRevision/allowLiveChanges rules, applied as one undo step.", "commands":(onRestart == nil ? [] : ["restart"]) + ["liquid_reset","tab_new","tab_select","tab_start","tab_stop","tab_close","metro_action","metro_snapshot","metro_revert","plugin_editor","plugin_retry","frame","publish","apc_window","apc_control","midi_panic","midi_device","midi_learn","midi_bind","midi_update","midi_unbind","midi_clear","midi_follow","library_refresh","mesh_preset","mesh_import","mesh_add","mesh_remove","mesh_duplicate","palette","modulate","unmodulate","add","remove","connect","disconnect","parameter","update","replace","select","play","pause","backdrop","view","preview","preview_pin","preview_close","preview_snapshot","component","component_toggle","ungroup","layout","record_start","record_stop","record_save","record_discard","save","open","snapshot"], "transaction":"Send an array of graph commands to apply atomically."]
+            return ["instancePorts":"GET /v1/nodes/{id}/ports","connectionOptions":"POST /v1/connections/options","projectVersion":Graph.currentVersion,"midiOutputDevices":MIDIOutputDevice.devices.map { ["id":$0.id,"name":$0.name] },"meshPresets":MeshGradientStyle.presets.enumerated().map { ["index":$0.offset,"name":$0.element.name,"source":$0.element.source,"author":$0.element.author] as [String:Any] },"meshDetail":"update.text accepts JSON {paths:{region:[[x,y,hardness]]},stops:{region:[[position,packedRGB,opacity]]}}. Paths use canvas-long-side units relative to the region pivot.","midiHooks":"GET /v1/midi/hooks","liveAPI":["catalog":"GET /v1/catalog","install":"POST /v1/effects","stage":"POST /v1/branches","job":"GET /v1/jobs/{id}","commit":"POST /v1/branches/{id}/commit","protection":"Active output dependencies are protected. Intentional changes require allowLiveChanges:true and expectedRevision."],"microphoneAuthorization":([0:"notDetermined",1:"restricted",2:"denied",3:"authorized"][AVCaptureDevice.authorizationStatus(for:.audio).rawValue] ?? "unknown"),"hardwareAudioDevices":HardwareAudioDevice.devices.map { ["id":$0.id,"name":$0.name,"inputs":$0.inputs,"outputs":$0.outputs] as [String:Any] },"projectorDisplays":NSScreen.screens.map { ["id":$0.patchDisplayID,"name":$0.localizedName] },"audioInputDevices":MicrophoneSource.devices.map { ["id":$0.uniqueID,"name":$0.localizedName] },"userNodeFolder":UserNodeLibrary.directory.path,"userNodes":UserNodeLibrary.shared.entries.map { ["name":$0.title,"kind":$0.kind.rawValue,"file":$0.file!.path] },"poseKeypoints":PosePoint.names,"version":1,"publishedOutputs":"GET /v1/outputs","portTypes":PortType.allCases.map(\.rawValue),"nodes":try NodeKind.allCases.map { kind -> [String:Any] in
+                ["midiParameters":kind.parameters.filter(\.supportsMIDI).map(\.key),"modulatableParameters":kind.modulatableParameters.map(\.key),"preview":kind.previewKind.rawValue,"kind":kind.rawValue,"title":kind.title,"category":kind.category,"inputs":try JSONSerialization.jsonObject(with:JSONEncoder().encode(kind.ports(output:false))),"outputs":try JSONSerialization.jsonObject(with:JSONEncoder().encode(kind.ports(output:true))),"output":kind.outputType?.rawValue as Any? ?? NSNull(),"parameters":try JSONSerialization.jsonObject(with:JSONEncoder().encode(kind.parameters))]
+            }, "apps":"Node apps (Poster Editor…) expose their own operations: GET /v1/apps/{nodeID} lists ops and state; POST /v1/apps/{nodeID} takes {op,…} or {commands:[…]} with the same expectedRevision/allowLiveChanges rules, applied as one undo step.", "commands":(onRestart == nil ? [] : ["restart"]) + ["liquid_reset","tab_new","tab_select","tab_start","tab_stop","tab_close","metro_action","metro_snapshot","metro_revert","plugin_editor","plugin_retry","frame","publish","apc_window","apc_control","midi_panic","midi_device","midi_learn","midi_bind","midi_update","midi_unbind","midi_clear","midi_follow","library_refresh","mesh_preset","mesh_import","mesh_add","mesh_remove","mesh_duplicate","palette","modulate","unmodulate","add","remove","connect","disconnect","parameter","update","replace","select","play","pause","backdrop","view","preview","preview_pin","preview_close","preview_snapshot","component","subpatch_extract","subpatch_instance","subpatch_interface","component_toggle","ungroup","layout","record_start","record_stop","record_save","record_discard","save","open","snapshot"], "transaction":"Send an array of graph commands to apply atomically."]
         }
         if path.hasPrefix("/v1/apps/") { return try appRoute(method,String(path.dropFirst("/v1/apps/".count)),data) }
         guard method == "POST", path == "/v1/commands" else { throw GraphError("Unknown route. Use GET /v1/state, GET /v1/schema, POST /v1/commands or /v1/apps/{nodeID}.") }
@@ -209,16 +213,67 @@ final class ControlAPI {
     func graphCommand(_ c: [String:Any], graph: inout Graph) throws -> [String:Any] {
         guard let op = c["op"] as? String else { throw GraphError("Missing op") }
         if let result = try midiGraphCommand(c,graph:&graph) { return result }
+        if ["connect","disconnect","modulate","publish"].contains(op), c["input"] != nil || c["output"] != nil {
+            throw GraphError("Use inputID or outputID to select a port.")
+        }
+        func port(_ field: String, keys: [String]) throws -> Int {
+            guard !keys.isEmpty else { throw GraphError("No "+field+" ports") }
+            guard let value = c[field+"ID"] else { return 0 }
+            guard let id = value as? String, let index = keys.firstIndex(of:id) else { throw GraphError("Unknown "+field+"ID") }
+            return index
+        }
+        func endpoint(_ owner: UUID, output: Bool) throws -> (node: UUID,index: Int) {
+            let field = output ? "output":"input"
+            if let group = graph.component(owner),let interface = group.interface {
+                let ports = interface.ports.filter { $0.output == output }
+                let index = try port(field,keys:ports.map { $0.id.uuidString })
+                return try graph.resolveSubpatchPort(group,id:ports[index].id,output:output)
+            }
+            guard let node = graph.node(owner) else { throw GraphError("Unknown node") }
+            return (owner,try port(field,keys:node.ports(output:output).map(\.id)))
+        }
+        func parameter(_ owner: UUID,key: String) throws -> (node: UUID,key: String) {
+            guard let group = graph.component(owner) else { return (owner,key) }
+            guard let address = group.interface?.parameters.first(where:{ $0.id == UUID(uuidString:key) }) else { throw GraphError("Unknown subpatch parameter") }
+            return (address.node,address.key)
+        }
         switch op {
         case "publish":
-            try graph.publish(try uuid(c,"id"),port:c["output"] as? Int ?? 0,mode:c["mode"] as? String ?? "auto",name:c["name"] as? String)
+            let id = try uuid(c,"id")
+            guard let node = graph.node(id) else { throw GraphError("Unknown node") }
+            let keys = node.publishablePortIDs
+            let index = try port("output",keys:keys)
+            try graph.publish(id,portID:keys[index],mode:c["mode"] as? String ?? "auto",name:c["name"] as? String)
         case "modulate":
             guard let key = c["key"] as? String else { throw GraphError("Missing parameter key") }
-            try graph.modulate(try uuid(c,"target"),key:key,source:try uuid(c,"source"),minimum:c["minimum"] as? Double,maximum:c["maximum"] as? Double,enabled:c["enabled"] as? Bool ?? true,output:c["output"] as? Int ?? 0)
+            let source = try endpoint(uuid(c,"source"),output:true), target = try parameter(uuid(c,"target"),key:key)
+            try graph.modulate(target.node,key:target.key,source:source.node,minimum:c["minimum"] as? Double,maximum:c["maximum"] as? Double,enabled:c["enabled"] as? Bool ?? true,output:source.index)
         case "unmodulate":
-            let id = try uuid(c,"target")
-            guard let key = c["key"] as? String,let i = graph.nodes.firstIndex(where:{ $0.id == id }) else { throw GraphError("Missing node or parameter") }
-            graph.nodes[i].modulations?.removeValue(forKey:key)
+            guard let key = c["key"] as? String else { throw GraphError("Missing parameter key") }
+            let target = try parameter(uuid(c,"target"),key:key)
+            guard let i = graph.nodes.firstIndex(where:{ $0.id == target.node }) else { throw GraphError("Unknown node") }
+            graph.nodes[i].modulations?.removeValue(forKey:target.key)
+        case "subpatch_extract":
+            let ids: Set<UUID>
+            if c["id"] != nil { ids = [try uuid(c,"id")] }
+            else {
+                guard let strings = c["nodes"] as? [String] else { throw GraphError("Expected member IDs") }
+                ids = try Set(strings.map { value in
+                    guard let id = UUID(uuidString:value) else { throw GraphError("Invalid member UUID") }
+                    return id
+                })
+            }
+            return ["id":try graph.extractSubpatch(ids,name:c["name"] as? String).uuidString]
+        case "subpatch_instance":
+            let template: SubpatchTemplate
+            if let object = c["template"] as? [String:Any] { template = try SubpatchTemplate.read(JSONSerialization.data(withJSONObject:object)) }
+            else { template = try graph.subpatchTemplate(uuid(c,"id")) }
+            let at = Position(c["x"] as? Double ?? template.component.position.x+280,c["y"] as? Double ?? template.component.position.y)
+            return ["id":try graph.instantiate(template,at:at,includeMIDI:c["includeMIDI"] as? Bool ?? false,enableOutputs:c["enableOutputs"] as? Bool ?? false).uuidString]
+        case "subpatch_interface":
+            guard let value = c["interface"] as? [String:Any] else { throw GraphError("Expected subpatch interface") }
+            let interface = try JSONDecoder().decode(SubpatchInterface.self,from:JSONSerialization.data(withJSONObject:value))
+            try graph.editInterface(uuid(c,"id")) { $0 = interface }
         case "component":
             guard let strings = c["nodes"] as? [String], strings.allSatisfy({ UUID(uuidString:$0) != nil }) else { throw GraphError("nodes must be an array of UUIDs") }
             let id = try graph.makeComponent(Set(strings.compactMap(UUID.init(uuidString:))))
@@ -235,6 +290,12 @@ final class ControlAPI {
             let id = c["id"] == nil ? UUID() : try uuid(c,"id")
             guard graph.node(id) == nil else { throw GraphError("Duplicate node ID") }
             var node = Node(kind:kind, position:.init(c["x"] as? Double ?? 120,c["y"] as? Double ?? 160),id:id)
+            node.fieldParameters = catalog?.fieldParameters
+            if let declaration = c["fieldParameters"] {
+                guard kind == .fieldShader, catalog == nil else { throw GraphError("Set fieldParameters on a standalone Field Shader or use its catalog definition") }
+                node.fieldParameters = try JSONDecoder().decode([ParameterSpec].self,from:JSONSerialization.data(withJSONObject:declaration))
+                try ParameterSpec.validateShaderParameters(node.fieldParameters ?? [])
+            }
             node.file = catalog?.file?.path; node.controlStyle = catalog?.controlStyle; node.name = catalog?.title ?? kind.title
             if let enabled = c["enabled"] as? Bool { node.enabled = enabled }
             if let name = c["name"] as? String { node.name = name }
@@ -255,12 +316,17 @@ final class ControlAPI {
             let id=try uuid(c,"id")
             guard let i=graph.nodes.firstIndex(where:{$0.id==id}),graph.nodes[i].hasLiquidSculptureControls else { throw GraphError("Choose a Liquid Metal or Liquid Chrome node") }
             if graph.nodes[i].hasLiquidChromeControls { LiquidChromeStyle.reset(&graph.nodes[i]) } else { LiquidMetalStyle.reset(&graph.nodes[i]) }
-        case "remove": let id = try uuid(c,"id"); guard graph.node(id) != nil else { throw GraphError("Unknown node") }; graph.remove(id)
-        case "connect": try graph.connect(try uuid(c,"source"),to:try uuid(c,"target"),input:c["input"] as? Int ?? 0,output:c["output"] as? Int ?? 0)
+        case "remove":
+            let id = try uuid(c,"id")
+            guard graph.node(id) != nil || graph.component(id) != nil else { throw GraphError("Unknown node or component") }
+            graph.remove(id)
+        case "connect":
+            let source = try endpoint(uuid(c,"source"),output:true),target = try endpoint(uuid(c,"target"),output:false)
+            try graph.connect(source.node,to:target.node,input:target.index,output:source.index)
         case "disconnect":
-            let id = try uuid(c,"target"), input = c["input"] as? Int ?? 0
-            guard let node = graph.node(id), node.inputs.indices.contains(input) else { throw GraphError("Unknown target or input") }
-            graph.edges.removeAll { $0.target == id && $0.input == input }
+            let target = try endpoint(uuid(c,"target"),output:false)
+            guard graph.node(target.node)?.inputs.indices.contains(target.index) == true else { throw GraphError("Unknown target or input") }
+            graph.edges.removeAll { $0.target == target.node && $0.input == target.index }
         case "palette":
             let id=try uuid(c,"id")
             guard let colors=c["colors"] else { throw GraphError("Expected colors: an ordered array of sRGB {r,g,b} objects") }
@@ -298,10 +364,25 @@ final class ControlAPI {
             else if let saved=graph.nodes[i].metroSnapshot { graph.nodes[i].parameters=saved }
             else { throw GraphError("Take a Metro snapshot first") }
         case "parameter":
-            guard let key = c["key"] as? String, let value = c["value"] as? Double else { throw GraphError("Expected key and numeric value") }
-            try setUserParameter(&graph,id:try uuid(c,"id"),key:key,value:value)
+            guard let key = c["key"] as? String else { throw GraphError("Expected a parameter key") }
+            let address = try parameter(uuid(c,"id"),key:key)
+            guard let node = graph.node(address.node) else { throw GraphError("Unknown parameter target") }
+            let value: Double
+            if let number = c["value"] as? Double { value = number }
+            else if let label = c["value"] as? String,
+                    let spec = node.parameterSpecs.first(where:{ $0.key == address.key }),
+                    let index = spec.choices?.firstIndex(of:label) { value = spec.min + Double(index) }
+            else { throw GraphError("Expected a number or a declared choice for "+address.key) }
+            try setUserParameter(&graph,id:address.node,key:address.key,value:value)
         case "update":
-            let id = try uuid(c,"id"); guard let i = graph.nodes.firstIndex(where:{$0.id==id}) else { throw GraphError("Unknown node") }
+            let id = try uuid(c,"id")
+            if let i = graph.components?.firstIndex(where:{ $0.id == id }) {
+                guard let name = c["name"] as? String,
+                      Set(c.keys).isSubset(of:["op","id","name","expectedRevision","allowLiveChanges"]) else { throw GraphError("Component update accepts a name") }
+                graph.components![i].name = name
+                return ["ok":true]
+            }
+            guard let i = graph.nodes.firstIndex(where:{$0.id==id}) else { throw GraphError("Unknown node") }
             if let name = c["name"] as? String { graph.nodes[i].name = name }
             if let text = c["text"] as? String { graph.nodes[i].text = text }
             if let poster = c["poster"] as? [String:Any] { graph.nodes[i].poster = try JSONDecoder().decode(PosterLayout.self,from:JSONSerialization.data(withJSONObject:poster)) }
@@ -315,7 +396,7 @@ final class ControlAPI {
             if let y = c["y"] as? Double { graph.nodes[i].position.y = y }
         case "replace":
             guard let object = c["graph"] else { throw GraphError("Missing graph") }
-            graph = try JSONDecoder().decode(Graph.self,from:JSONSerialization.data(withJSONObject:object)).validated()
+            graph = try Graph.read(JSONSerialization.data(withJSONObject:object))
         default: throw GraphError("Unknown graph command: \(op)")
         }
         return ["ok":true]

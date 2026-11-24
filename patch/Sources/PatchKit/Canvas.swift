@@ -10,6 +10,17 @@ extension NSColor {
     static let patchAccent = NSColor(calibratedRed: 0.57, green: 0.83, blue: 0.66, alpha: 1)
     static let patchPublished = NSColor(calibratedRed: 0.98, green: 0.36, blue: 0.32, alpha: 1)
     static let patchPaused = NSColor(calibratedRed: 1.0, green: 0.74, blue: 0.20, alpha: 1)
+    static func signal(_ type: PortType?) -> NSColor {
+        switch type {
+        case .audio: return .systemYellow
+        case .midi: return .systemIndigo
+        case .control, .drawRate: return .systemOrange
+        case .field, .dots: return .systemGreen
+        case .faces, .poses, .palette: return .systemPink
+        case .vectorPath, .geometry, .trace: return .systemPurple
+        default: return .systemTeal
+        }
+    }
     static func node(_ kind: NodeKind) -> NSColor {
         if kind.isMIDINode { return NSColor(calibratedRed:0.65,green:0.72,blue:0.96,alpha:1) }
         if kind == .cellularField || kind == .streakField || kind == .waterfallField || kind == .streakGlow || kind == .blockerField || kind == .dataStream || kind == .lfo || kind == .noise { return NSColor(calibratedRed:0.76,green:0.58,blue:0.96,alpha:1) }
@@ -31,7 +42,12 @@ func drawText(_ text: String, _ rect: NSRect, size: CGFloat = 12, color: NSColor
     let range = CFRange(location:0,length:CFAttributedStringGetLength(value))
     CFAttributedStringSetAttribute(value,range,kCTFontAttributeName,ctFont)
     CFAttributedStringSetAttribute(value,range,kCTForegroundColorAttributeName,color.cgColor)
-    let line = CTLineCreateWithAttributedString(value)
+    var line = CTLineCreateWithAttributedString(value)
+    if CTLineGetTypographicBounds(line,nil,nil,nil) > rect.width, range.length > 0 {
+        let token = CFAttributedStringCreateMutableCopy(nil,0,value)!
+        CFAttributedStringReplaceString(token,range,"…" as CFString)
+        line = CTLineCreateTruncatedLine(line,Double(rect.width),.end,CTLineCreateWithAttributedString(token)) ?? line
+    }
     context.saveGState()
     context.clip(to:rect)
     context.textMatrix = .identity
@@ -42,6 +58,18 @@ func drawText(_ text: String, _ rect: NSRect, size: CGFloat = 12, color: NSColor
     context.restoreGState()
 }
 
+private extension PortType {
+    var canvasName: String {
+        switch self {
+        case .rgbProfiles: return "RGB Profiles"
+        case .chromaReference: return "Frame Reference"
+        case .vectorPath: return "Vector Path"
+        case .drawRate: return "Draw Rate"
+        case .midi: return "MIDI"
+        default: return rawValue.capitalized
+        }
+    }
+}
 private enum CanvasDrag {
     case nodes(UUID, NSPoint, Position)
     case cable(UUID, Bool, Int)
@@ -68,8 +96,39 @@ final class GraphCanvas: NSView {
     private var drag: CanvasDrag?
     private var quickGesture: QuickGesture?
     private var cursor = NSPoint.zero
+    private var trace: (root: UUID, upstream: Bool)?
+    private func tracedNodes() -> Set<UUID> {
+        guard let trace, workspace.graph.node(trace.root) != nil else { return [] }
+        var visited: Set<UUID> = [trace.root], pending = [trace.root]
+        var adjacent: [UUID:[UUID]] = [:]
+        for edge in workspace.graph.dependencies {
+            let from = trace.upstream ? edge.target : edge.source
+            adjacent[from,default:[]].append(trace.upstream ? edge.source : edge.target)
+        }
+        while let id = pending.popLast() {
+            for next in adjacent[id] ?? [] where visited.insert(next).inserted { pending.append(next) }
+        }
+        return visited
+    }
     private var hoverEdge: UUID?
-    private var hoverAPC: Int?
+    private struct Socket: Hashable {
+        let id: UUID
+        let output: Bool
+        let index: Int
+    }
+    private var hoveredSocket: Socket?
+    private var inspectedSocket: Socket?
+    private var compact: Bool { zoom < 0.65 }
+    private var largeLabels: Bool {
+        get { UserDefaults.standard.bool(forKey:"patch.canvas.largeLabels") }
+        set { UserDefaults.standard.set(newValue,forKey:"patch.canvas.largeLabels") }
+    }
+    private func socketType(_ socket: Socket) -> PortType? {
+        guard let node = workspace.graph.node(socket.id) else { return nil }
+        if socket.output { return node.kind.outputType(at:socket.index) }
+        if socket.index < 0 { return .control }
+        return node.inputTypes.indices.contains(socket.index) ? node.inputTypes[socket.index] : nil
+    }
     private var selectedEdge: UUID?
     private var dragGraph: Graph?
     private var componentPreviews: [UUID:VideoView] = [:]
@@ -92,7 +151,7 @@ final class GraphCanvas: NSView {
     required init?(coder: NSCoder) { fatalError() }
     override func updateTrackingAreas() {
         super.updateTrackingAreas(); if let tracking { removeTrackingArea(tracking) }
-        tracking = NSTrackingArea(rect: .zero, options: [.activeInKeyWindow, .mouseMoved, .inVisibleRect], owner: self)
+        tracking = NSTrackingArea(rect: .zero, options: [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect], owner: self)
         addTrackingArea(tracking!)
     }
     func world(_ p: NSPoint) -> NSPoint { .init(x: (p.x - offset.x) / zoom, y: (p.y - offset.y) / zoom) }
@@ -128,9 +187,10 @@ final class GraphCanvas: NSView {
     func slot(_ node: Node, output: Bool, input: Int = 0) -> NSRect {
         if node.kind == .apc40 && output { return apcControl(node,output:input) }
         let p = port(node,output:output,input:input)
-        return .init(x:p.x-(output ? 70 : 0),y:p.y-10,width:70,height:20)
+        return .init(x:p.x-(output ? 99 : 0),y:p.y-10,width:99,height:20)
     }
     func hitPort(_ p: NSPoint) -> (UUID, Bool, Int)? {
+        guard !compact else { return nil }
         for group in workspace.graph.groups where group.collapsed {
             for out in [false,true] { for (i,port) in workspace.graph.ports(group,output:out).enumerated() {
                 let anchor = componentPort(group,output:out,index:i)
@@ -323,12 +383,17 @@ final class GraphCanvas: NSView {
         return hypot(point.x-a.x-t*dx,point.y-a.y-t*dy)
     }
     func hitCable(_ point: NSPoint, excluding node: UUID? = nil) -> UUID? {
-        for e in workspace.graph.edges where e.source != node && e.target != node {
-            guard let (a,b)=cable(e) else { continue }
-            let points=routePoints(a,b)
-            if zip(points,points.dropFirst()).contains(where:{ distance(point,to:$0.0,$0.1)<13/zoom }) { return e.id }
+        var closest: UUID?
+        var radius = 8 / zoom
+        for edge in workspace.graph.edges where edge.source != node && edge.target != node {
+            guard let (a,b) = cable(edge) else { continue }
+            let points = routePoints(a,b)
+            for (start,end) in zip(points,points.dropFirst()) {
+                let d = distance(point,to:start,end)
+                if d < radius { closest = edge.id; radius = d }
+            }
         }
-        return nil
+        return closest
     }
     func insertionEdge(_ node: Node) -> UUID? {
         guard node.inputs.count == 1, node.kind.outputType == node.inputTypes.first,
@@ -376,7 +441,7 @@ final class GraphCanvas: NSView {
             pause.toolTip = "\(action) \(node.name)" + (node.enabled && node.kind.bypassInput() != nil ? " · passes input through" : "")
             pause.setAccessibilityLabel("\(action) \(node.name)")
             pause.frame = NSRect(origin:screen(.init(x:node.position.x+node.canvasWidth-28,y:node.position.y+8)),size:.init(width:20*zoom,height:20*zoom))
-            pause.isHidden = zoom < 0.4 || workspace.graph.collapsedOwner(node.id) != nil
+            pause.isHidden = compact || workspace.graph.collapsedOwner(node.id) != nil
             if node.kind == .record || node.kind == .recordAudio {
                 let phase = renderer.recordingInfo(node.id)?.phase
                 let button = discardButtons[node.id] ?? NSButton(title:"Discard",target:self,action:#selector(discardTake(_:)))
@@ -387,7 +452,7 @@ final class GraphCanvas: NSView {
                 }
                 button.font = .systemFont(ofSize:max(8,10*zoom))
                 button.frame = NSRect(origin:screen(.init(x:node.position.x+75,y:node.position.y+202)),size:.init(width:60*zoom,height:19*zoom))
-                button.isHidden = !["ready","failed"].contains(phase ?? "") || zoom < 0.4 || workspace.graph.collapsedOwner(node.id) != nil
+                button.isHidden = !["ready","failed"].contains(phase ?? "") || compact || workspace.graph.collapsedOwner(node.id) != nil
             }
             if node.kind == .window || node.kind == .projector || node.kind == .record || node.kind == .recordAudio || node.kind == .loopmother || node.kind == .metroSequencer {
                 let button = outputButtons[node.id] ?? NSButton(title:"Open ↗",target:self,action:#selector(openNodeWindow(_:)))
@@ -404,7 +469,7 @@ final class GraphCanvas: NSView {
                 }
                 button.font = .systemFont(ofSize:max(8,10*zoom))
                 button.frame = NSRect(origin:screen(.init(x:node.position.x+140,y:node.position.y+202)),size:.init(width:62*zoom,height:19*zoom))
-                button.isHidden = zoom < 0.4 || workspace.graph.collapsedOwner(node.id) != nil
+                button.isHidden = compact || workspace.graph.collapsedOwner(node.id) != nil
             }
             if node.kind == .apc40 { previews.removeValue(forKey:node.id)?.removeFromSuperview(); continue }
             let view = previews[node.id] ?? VideoView(renderer: renderer)
@@ -413,8 +478,7 @@ final class GraphCanvas: NSView {
             let origin = screen(.init(x: node.position.x + 12, y: node.position.y + 94 + Double(max(0,node.portRows-2))*25))
             view.frame = .init(origin: origin, size: .init(width: 186 * zoom, height: 105 * zoom))
             view.alphaValue = node.enabled ? 1 : 0.3
-            // Keep on-screen previews visible at every zoom, including Frame All on large graphs.
-            view.isHidden = workspace.graph.collapsedOwner(node.id) != nil || (node.kind.outputType == .geometry) || !bounds.intersects(view.frame)
+            view.isHidden = workspace.graph.collapsedOwner(node.id) != nil || node.kind.previewKind == .empty || (node.kind.outputType == .geometry) || !bounds.intersects(view.frame)
         }
         for id in Array(componentPreviews.keys) where workspace.graph.component(id)?.collapsed != true { componentPreviews.removeValue(forKey:id)?.removeFromSuperview() }
         for group in workspace.graph.groups where group.collapsed {
@@ -423,7 +487,7 @@ final class GraphCanvas: NSView {
             view.nodeID = workspace.graph.previewNode(group.id)?.id
             let r = componentRect(group)
             view.frame = .init(origin:screen(.init(x:r.minX+12,y:r.maxY-125)),size:.init(width:226*zoom,height:100*zoom))
-            view.isHidden = !bounds.intersects(view.frame)
+            view.isHidden = view.nodeID == nil || !bounds.intersects(view.frame)
         }
         needsDisplay = true
     }
@@ -438,26 +502,26 @@ final class GraphCanvas: NSView {
                 for y in stride(from: offset.y.truncatingRemainder(dividingBy: grid), through: bounds.height, by: grid) { NSRect(x: x, y: y, width: 1, height: 1).fill() }
             }
         }
-        drawText("PATCH / GRAPH", .init(x: 24, y: 20, width: 240, height: 18), size: 10, color: .patchMuted, weight: .semibold, mono: true)
-        if workspace.graph.nodes.isEmpty { drawText("⌘F to add a node  ·  Drop media here", .init(x: 24, y: 55, width: 500, height: 24), size: 16, color: .patchMuted) }
+        if workspace.graph.nodes.isEmpty { drawText("Add Node  ⌘F", .init(x: 24, y: 55, width: 500, height: 24), size: 16, color: .patchMuted) }
         NSGraphicsContext.saveGraphicsState()
         let transform = AffineTransform(translationByX: offset.x, byY: offset.y); (transform as NSAffineTransform).concat()
         let scale = NSAffineTransform(); scale.scale(by: zoom); scale.concat()
-        for group in workspace.graph.groups { drawComponent(group) }
+        let traced = tracedNodes()
+        for group in workspace.graph.groups { drawComponent(group,traced:traced) }
         for node in workspace.graph.nodes {
             for (key,binding) in node.modulations ?? [:] {
                 guard let source = workspace.graph.node(binding.source) else { continue }
                 if let group = workspace.graph.collapsedOwner(source.id),group.members.contains(node.id) { continue }
-                let line = path(port(source,output:true,input:binding.outputIndex),modulationPort(node,key:key)); line.lineWidth = 1.5
-                line.setLineDash([5,3],count:2,phase:0); (sliceCrosses(port(source,output:true,input:binding.outputIndex),modulationPort(node,key:key)) ? NSColor.systemRed : NSColor.node(.lfo).withAlphaComponent(binding.enabled ? 0.9 : 0.3)).setStroke(); line.stroke()
+                let line = path(port(source,output:true,input:binding.outputIndex),modulationPort(node,key:key)); line.lineWidth = traced.contains(node.id) && traced.contains(source.id) ? 3 : 1.5
+                line.setLineDash([5,3],count:2,phase:0); (sliceCrosses(port(source,output:true,input:binding.outputIndex),modulationPort(node,key:key)) ? NSColor.systemRed : NSColor.signal(.control).withAlphaComponent(binding.enabled ? 0.9 : 0.3)).setStroke(); line.stroke()
             }
         }
         for edge in workspace.graph.edges {
             guard let (a,b) = cable(edge) else { continue }
             let cutting = sliceCrosses(a,b)
-            let highlight = cutting || hoverEdge == edge.id || selectedEdge == edge.id
+            let highlight = (traced.contains(edge.source) && traced.contains(edge.target)) || cutting || hoverEdge == edge.id || selectedEdge == edge.id
             let p = path(a,b); p.lineWidth = highlight ? 3 : 2
-            (cutting ? NSColor.systemRed : highlight ? NSColor.patchAccent : (workspace.graph.node(edge.source)?.kind.outputType(at:edge.outputIndex) == .midi ? NSColor.node(.arpeggiator) : workspace.graph.node(edge.source)?.kind.outputType(at:edge.outputIndex) == .palette ? NSColor.systemPink : workspace.graph.node(edge.source)?.kind.outputType(at:edge.outputIndex) == .field ? NSColor.node(.dataStream) : workspace.graph.node(edge.source)?.kind.outputType(at:edge.outputIndex) == .audio ? NSColor.node(.audio) : workspace.graph.node(edge.source)?.kind.outputType(at:edge.outputIndex) == .poses ? NSColor.node(.yoloPose) : workspace.graph.node(edge.source)?.kind.outputType(at:edge.outputIndex) == .faces ? NSColor.node(.faceDetect) : workspace.graph.node(edge.source)?.kind.outputType(at:edge.outputIndex) == .geometry ? NSColor.node(.lorenz) : NSColor(calibratedRed: 0.37, green: 0.57, blue: 0.60, alpha: 1))).setStroke(); p.stroke()
+            (cutting ? NSColor.systemRed : highlight ? NSColor.patchAccent : NSColor.signal(workspace.graph.node(edge.source)?.kind.outputType(at:edge.outputIndex))).setStroke(); p.stroke()
             if hoverEdge == edge.id { let points=routePoints(a,b); let c = points[points.count/2]; NSColor.patchAccent.setFill(); NSBezierPath(ovalIn: .init(x:c.x-4,y:c.y-4,width:8,height:8)).fill() }
         }
         if case let .cable(id, output, input) = drag, let node = workspace.graph.node(id) {
@@ -465,9 +529,25 @@ final class GraphCanvas: NSView {
             NSColor.patchAccent.setStroke(); p.lineWidth = 2; p.setLineDash([5,4], count: 2, phase: 0); p.stroke()
         }
         let hover = hitPort(world(cursor))
+        var wiring: (source: Socket, type: PortType)?
+        if case let .cable(id,out,index) = drag {
+            let socket = Socket(id:id,output:out,index:index)
+            if let type = socketType(socket) { wiring = (socket,type) }
+        }
         let publishedNodes = Set(workspace.graph.publishablePorts.filter { $0.listed && workspace.graph.node($0.nodeID)?.publishesAutomatically == false }.map(\.nodeID))
+        var connectedSockets = Set<Socket>()
+        for edge in workspace.graph.edges {
+            connectedSockets.insert(Socket(id:edge.source,output:true,index:edge.outputIndex))
+            connectedSockets.insert(Socket(id:edge.target,output:false,index:edge.input))
+        }
+        for node in workspace.graph.nodes {
+            for binding in (node.modulations ?? [:]).values {
+                connectedSockets.insert(Socket(id:binding.source,output:true,index:binding.outputIndex))
+            }
+        }
+        let large = largeLabels
         for node in visibleNodes {
-            if node.kind == .apc40 {
+            if node.kind == .apc40 && !compact {
                 drawAPC40(node,selected:workspace.selectedIDs.contains(node.id),hover:hover.flatMap { $0.0 == node.id && $0.1 ? $0.2 : nil })
                 continue
             }
@@ -475,7 +555,7 @@ final class GraphCanvas: NSView {
             let published = publishedNodes.contains(node.id)
             // Paused nodes are amber with a dashed border and a pause mark; that outranks the published tint.
             let paused = !node.enabled, marked = published || paused
-            let r = rect(node), selected = workspace.selectedIDs.contains(node.id), color = paused ? NSColor.patchPaused : published ? NSColor.patchPublished : NSColor.node(node.kind)
+            let r = rect(node), selected = workspace.selectedIDs.contains(node.id) || traced.contains(node.id), color = paused ? NSColor.patchPaused : published ? NSColor.patchPublished : NSColor.node(node.kind)
             (marked ? NSColor.patchPanel.blended(withFraction:0.2,of:color) ?? .patchPanel : NSColor.patchPanel).setFill(); NSBezierPath(roundedRect: r, xRadius: 0, yRadius: 0).fill()
             (selected || marked ? color : NSColor(white: 0.25, alpha: 1)).setStroke()
             let border = NSBezierPath(roundedRect: r.insetBy(dx:0.5,dy:0.5), xRadius:0,yRadius:0); border.lineWidth = selected ? (marked ? 3 : 1.8) : (marked ? 1.8 : 1)
@@ -484,35 +564,54 @@ final class GraphCanvas: NSView {
             color.setFill()
             if paused { for x in [r.minX+10,r.minX+15] { NSRect(x:x,y:r.minY+13,width:3,height:10).fill() } }
             else { NSBezierPath(roundedRect: .init(x:r.minX+11,y:r.minY+13,width:5,height:10),xRadius:0,yRadius:0).fill() }
-            drawText(node.name, .init(x:r.minX+24,y:r.minY+9,width:154,height:20), size:12, color: node.enabled ? .labelColor : .patchMuted, weight:.medium)
-            drawText(node.enabled ? node.kind.category + " / " + node.kind.rawValue.uppercased() : node.kind.pausedStatus.uppercased(), .init(x:r.minX+12,y:r.maxY-19,width:[.record,.recordAudio].contains(node.kind) && ["ready","failed"].contains(renderer.recordingInfo(node.id)?.phase ?? "") ? 58 : ((node.kind == .window || node.kind == .projector || node.kind == .record || node.kind == .recordAudio) ? 122 : 180),height:16),size:8,color:.patchMuted,mono:true)
+            let title = node.catalogTitle
+            let renamed = node.name != title
+            if compact {
+                let headerSize = min(32,13/max(zoom,0.01))
+                drawText(title,.init(x:r.minX+22,y:r.minY+6,width:r.width-30,height:headerSize*1.3),size:headerSize,weight:.semibold)
+                if renamed {
+                    drawText(node.name,.init(x:r.minX+10,y:r.minY+8+headerSize*1.3,width:r.width-20,height:headerSize*1.2),size:headerSize*0.85,color:.secondaryLabelColor)
+                }
+                continue
+            }
+            drawText(title,.init(x:r.minX+24,y:r.minY+(renamed ? 2 : 8),width:r.width-55,height:22),size:large ? 18 : 15,weight:.semibold)
+            if renamed {
+                drawText(node.name,.init(x:r.minX+24,y:r.minY+21,width:r.width-55,height:18),size:large ? 14 : 12,color:.secondaryLabelColor)
+            }
             if node.kind.outputType == .geometry {
                 drawText("∿", .init(x:r.minX+70,y:r.minY+94,width:90,height:68),size:62,color:color,weight:.ultraLight)
                 drawText(node.kind == .audio ? "AUDIO / PCM" : "\(Int(node.value("points"))) VERTICES", .init(x:r.minX+45,y:r.minY+177,width:140,height:16),size:9,color:.patchMuted,mono:true)
             }
             for key in (node.modulations ?? [:]).keys.sorted() {
-                let p = modulationPort(node,key:key), color = NSColor.node(.lfo)
+                let p = modulationPort(node,key:key), color = NSColor.signal(.control)
                 let slot = NSRect(x:p.x,y:p.y-9,width:180,height:18)
                 color.withAlphaComponent(0.12).setFill(); slot.fill(); color.setStroke(); NSBezierPath(rect:slot).stroke()
                 let name = node.parameterSpecs.first(where:{ $0.key == key })?.title ?? key
-                drawText("∿ "+name,.init(x:p.x+6,y:p.y-6,width:168,height:14),size:9,color:color)
+                drawText("∿ "+name,.init(x:p.x+6,y:p.y-7,width:168,height:16),size:12,color:color)
             }
             let allPorts = node.inputs.indices.map { (false,$0) } + node.kind.outputTypes.indices.map { (true,$0) }
             for (out,i) in allPorts {
                 let p = port(node,output:out,input:i)
                 let slotRect = slot(node,output:out,input:i)
                 let type = out ? node.kind.outputTypes[i] : node.inputTypes[i]
-                let portColor = type == .midi ? NSColor.node(.arpeggiator) : type == .palette ? NSColor.systemPink : (type == .control || type == .drawRate) ? NSColor.node(.lfo) : type == .poses ? NSColor.node(.yoloPose) : type == .faces ? NSColor.node(.faceDetect) : type == .audio ? NSColor.node(.audio) : (type == .geometry || type == .vectorPath) ? NSColor.node(.lorenz) : NSColor(calibratedRed:0.39,green:0.68,blue:0.83,alpha:1)
-                let connected = out ? (workspace.graph.edges.contains { $0.source == node.id && $0.outputIndex == i } || workspace.graph.nodes.contains { ($0.modulations ?? [:]).values.contains { $0.source == node.id && $0.outputIndex == i } }) : workspace.graph.edges.contains { $0.target == node.id && $0.input == i }
+                let portColor = NSColor.signal(type)
+                let compatible = wiring.map {
+                    $0.source.id != node.id && $0.source.output != out && (out ? $0.type.accepts(type) : type.accepts($0.type))
+                } ?? false
+                let socket = Socket(id:node.id,output:out,index:i)
+                let active = hoveredSocket == socket || inspectedSocket == socket
+                let connected = connectedSockets.contains(socket)
                 portColor.withAlphaComponent(connected ? 0.20 : 0.06).setFill(); slotRect.fill()
-                if node.kind == .apc40, let value = renderer.apcState.snapshot[i] {
-                    portColor.withAlphaComponent(0.35).setFill()
-                    NSRect(x:slotRect.minX,y:slotRect.maxY-2,width:slotRect.width*value,height:2).fill()
-                }
-                portColor.withAlphaComponent(0.7).setStroke(); let outline = NSBezierPath(rect:slotRect.insetBy(dx:0.5,dy:0.5)); outline.lineWidth = 0.7; outline.stroke()
-                let label = node.kind == .apc40 ? node.kind.outputs[i].uppercased() : type == .midi ? (node.kind == .metroSequencer && out ? ["MIDI A","MIDI B","MIDI A+B"][i] : (out ? node.kind.outputs[i]:node.inputs[i]).uppercased()) : type == .rgbProfiles ? "RGB × XY" : type == .chromaReference ? "FRAME REF" : node.kind == .chromaEncoder && out && i == 0 ? (node.value("channel")<0.5 ? "COLOR AUDIO · L":"COLOR AUDIO · R") : type == .vectorPath ? "PATH" : type == .drawRate ? "DRAW Hz" : type == .visual ? "LAYER \(i+1)" : (node.kind == .faceReplace || node.kind == .audioMix) && !out ? node.inputs[i].uppercased() : type == .trace ? "TRACE" : type == .collection ? "COLLECTION" : type == .palette ? "PALETTE" : type == .dots ? "DOTS" : type == .control ? "CONTROL" : type == .poses ? "POSES" : type == .faces ? "FACES" : type == .audio ? (out ? node.kind.outputs[i]:node.inputs[i]).uppercased() : type == .geometry ? "GEOMETRY" : (node.kind == .mux && !out ? "VIDEO \(i+1)" : (node.kind == .blend && !out ? "\(node.inputs[i]) · VIDEO" : "VIDEO"))
-                drawText(label,.init(x:slotRect.minX+8,y:slotRect.minY+4,width:slotRect.width-12,height:13),size:8,color:portColor,weight:.medium,mono:true)
-                portColor.setFill(); NSRect(x:p.x-2,y:p.y-5,width:4,height:10).fill()
+                let emphasis = active || compatible
+                portColor.withAlphaComponent(emphasis ? 1 : 0.6).setStroke()
+                let outline = NSBezierPath(rect:slotRect.insetBy(dx:1,dy:1))
+                outline.lineWidth = emphasis ? 2.2 : 0.7
+                outline.stroke()
+                let name = out ? node.kind.outputs[i] : node.inputs[i]
+                let typeName = type.canvasName
+                let label = name.count <= 6 && name.caseInsensitiveCompare(typeName) != .orderedSame ? name+" · "+typeName : name
+                drawText(label,.init(x:slotRect.minX+5,y:slotRect.minY+(large ? 1 : 3),width:slotRect.width-10,height:18),size:large ? 15 : 12,color:wiring == nil || compatible || active ? .labelColor : .secondaryLabelColor,weight:.medium)
+                drawJack(at:p,type:type)
             }
         }
         if case let .slice(start) = drag {
@@ -533,6 +632,11 @@ final class GraphCanvas: NSView {
             let outline = NSBezierPath(rect:box); outline.lineWidth = 1/zoom; outline.stroke()
         }
         NSGraphicsContext.restoreGraphicsState()
+        if let label = inspectionLabel() {
+            let panel = NSRect(x:12,y:10,width:min(bounds.width-24,ceil((label as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:13)]).width)+16),height:24)
+            NSColor.patchPanel.setFill(); panel.fill()
+            drawText(label,panel.insetBy(dx:7,dy:4),size:13)
+        }
         if case .slice = drag {
             let count = workspace.graph.edges.filter { edge in cable(edge).map { sliceCrosses($0.0,$0.1) } ?? false }.count+slicedModulations().count
             drawText("Slice: \(count) connection\(count == 1 ? "" : "s") · Release Shift to cut · Esc cancels",.init(x:24,y:42,width:540,height:20),size:11,color:.systemRed)
@@ -541,20 +645,72 @@ final class GraphCanvas: NSView {
             drawText(matches.count > 1 ? "Multiple matching ports · aim at a port to choose" : "Release Shift to connect · Esc cancels",.init(x:24,y:42,width:540,height:20),size:11,color:matches.count > 1 ? .systemOrange : .patchAccent)
         }
     }
-    func drawComponent(_ group: Component) {
+    private func drawJack(at point: NSPoint, type: PortType) {
+        let box = NSRect(x:point.x-3.5,y:point.y-3.5,width:7,height:7)
+        let mark: NSBezierPath
+        switch type {
+        case .midi, .control, .drawRate:
+            mark = NSBezierPath()
+            mark.move(to:.init(x:box.midX,y:box.minY-1))
+            mark.line(to:.init(x:box.maxX+1,y:box.midY))
+            mark.line(to:.init(x:box.midX,y:box.maxY+1))
+            mark.line(to:.init(x:box.minX-1,y:box.midY))
+            mark.close()
+        case .audio, .vectorPath, .trace, .geometry: mark = NSBezierPath(ovalIn:box)
+        default: mark = NSBezierPath(rect:box)
+        }
+        NSColor.signal(type).setFill(); mark.fill()
+    }
+    private func signalReading(source: Node, output: Int) -> String? {
+        renderer.observation(of:source,output:output,graph:workspace.graph)?.label
+    }
+    private func inspectionLabel() -> String? {
+        if let socket = hoveredSocket ?? inspectedSocket, let node = workspace.graph.node(socket.id), let type = socketType(socket) {
+            let names = socket.output ? node.kind.outputs : node.inputs
+            let name: String
+            var reading: String?
+            if socket.index < 0 {
+                let keys = (node.modulations ?? [:]).keys.sorted()
+                guard keys.indices.contains(-socket.index-1) else { return nil }
+                let key = keys[-socket.index-1]
+                name = node.parameterSpecs.first(where:{ $0.key == key })?.title ?? key
+                if let binding=node.modulations?[key], let source=workspace.graph.node(binding.source) {
+                    let effective = renderer.modulationValues[node.id]?[key] ?? node.value(key)
+                    reading = source.name+" → "+effective.formatted(.number.precision(.fractionLength(0...3)))
+                }
+            } else {
+                guard names.indices.contains(socket.index) else { return nil }
+                name = names[socket.index]
+                if socket.output { reading = signalReading(source:node,output:socket.index) }
+                else if let edge=workspace.graph.edges.first(where:{ $0.target == node.id && $0.input == socket.index }),
+                        let source=workspace.graph.node(edge.source) {
+                    reading = signalReading(source:source,output:edge.outputIndex)
+                }
+            }
+            return [node.name, socket.output ? "Output" : "Input", name, type.canvasName,reading].compactMap { $0 }.joined(separator:" · ")
+        }
+        guard let id = selectedEdge ?? hoverEdge, let edge = workspace.graph.edges.first(where:{ $0.id == id }),
+              let source = workspace.graph.node(edge.source),let target = workspace.graph.node(edge.target),
+              let type = source.kind.outputType(at:edge.outputIndex),target.inputs.indices.contains(edge.input) else { return nil }
+        let endpoints = "\(source.name) · \(source.kind.outputs[edge.outputIndex])  →  \(target.name) · \(target.inputs[edge.input])   [\(type.canvasName)]"
+        return [endpoints, signalReading(source:source,output:edge.outputIndex)].compactMap { $0 }.joined(separator:" · ")
+    }
+    func drawComponent(_ group: Component,traced: Set<UUID>) {
         let r = componentRect(group)
         NSColor.patchPanel.withAlphaComponent(group.collapsed ? 1 : 0.3).setFill(); r.fill()
-        (workspace.selectedIDs.contains(group.id) ? NSColor.patchAccent : NSColor.patchMuted).setStroke(); NSBezierPath(rect:r).stroke()
+        (workspace.selectedIDs.contains(group.id) || !traced.isDisjoint(with:group.members) ? NSColor.patchAccent : NSColor.patchMuted).setStroke(); NSBezierPath(rect:r).stroke()
         drawText((group.collapsed ? "▸ " : "▾ ")+group.name,.init(x:r.minX+12,y:r.minY+9,width:r.width-24,height:20),size:12,weight:.medium)
-        guard group.collapsed else { return }
-        drawText("COMPONENT · \(group.members.count) NODES",.init(x:r.minX+12,y:r.maxY-18,width:r.width-24,height:16),size:9,color:.patchMuted,mono:true)
+        guard group.collapsed, !compact else { return }
+        let kind = group.interface == nil ? "Component" : "Subpatch"
+        drawText("\(kind) · \(group.members.count) nodes",.init(x:r.minX+12,y:r.maxY-18,width:r.width-24,height:16),size:12,color:.secondaryLabelColor)
         for out in [false,true] {
             for (i,port) in workspace.graph.ports(group,output:out).enumerated() {
                 let p = componentPort(group,output:out,index:i)
                 let slot = NSRect(x:p.x-(out ? 112 : 0),y:p.y-10,width:112,height:20)
-                let color = NSColor.node(port.type == .control ? .lfo : port.type == .poses ? .yoloPose : port.type == .faces ? .faceDetect : port.type == .geometry ? .lorenz : (port.type == .audio ? .audio : .image))
+                let color = NSColor.signal(port.type)
                 color.withAlphaComponent(0.16).setFill(); slot.fill(); color.setStroke(); NSBezierPath(rect:slot).stroke()
-                drawText(port.name,.init(x:slot.minX+4,y:slot.minY+4,width:104,height:14),size:8,color:color)
+                drawText(port.name,.init(x:slot.minX+6,y:slot.minY+3,width:100,height:16),size:12,color:.labelColor)
+                drawJack(at:p,type:port.type)
             }
         }
     }
@@ -581,7 +737,9 @@ final class GraphCanvas: NSView {
         workspace.dismissLibraryPreview()
         if event.modifierFlags.contains(.control) { rightMouseDown(with:event); return }
         window?.makeFirstResponder(self); cursor = convert(event.locationInWindow, from: nil); let p = world(cursor)
+        inspectedSocket = nil; selectedEdge = nil; hoverEdge = nil
         if let (id,out,input) = hitPort(p) {
+            inspectedSocket = Socket(id:id,output:out,index:input)
             if event.modifierFlags.contains(.option), !out {
                 workspace.edit("Disconnect") { graph in
                     if input < 0,let i = graph.nodes.firstIndex(where:{ $0.id == id }) {
@@ -590,14 +748,14 @@ final class GraphCanvas: NSView {
                     } else { graph.edges.removeAll { $0.target == id && $0.input == input } }
                 }; return
             }
-            drag = .cable(id,out,input); return
+            drag = .cable(id,out,input); needsDisplay = true; return
         }
         if let group = workspace.graph.groups.reversed().first(where:{ g in let r = componentRect(g); return (g.collapsed ? r : NSRect(x:r.minX,y:r.minY,width:r.width,height:30)).contains(p) }) {
             if event.modifierFlags.contains(.command) {
                 workspace.select(group.id,extend:true); selectedEdge = nil; needsDisplay = true; return
             }
             if event.modifierFlags.contains(.shift) { workspace.select(group.id,extend:true) } else { workspace.focusSelection(group.id) }; selectedEdge = nil
-            if event.clickCount == 2 { workspace.toggleComponent(group.id); return }
+            if event.clickCount == 2 { if compact { frameSelection() } else { workspace.toggleComponent(group.id) }; return }
             dragGraph = workspace.graph; workspace.beginGesture(); drag = .nodes(group.id,p,group.position)
         } else if let node = visibleNodes.reversed().first(where:{ rect($0).contains(p) }) {
             if event.modifierFlags.contains(.command) {
@@ -607,6 +765,7 @@ final class GraphCanvas: NSView {
             else { workspace.focusSelection(node.id) }
             selectedEdge = nil
             if event.clickCount == 2 {
+                if compact { frameSelection(); return }
                 if let edge = insertionEdge(node) { workspace.edit("Insert Node") { try $0.insert(node.id,on:edge) } }
                 else if NodeApp.for(node) != nil { workspace.onPinnedPreview?(node.id) }
                 else if node.kind == .audioPlugin { workspace.onInspect?(node.id); workspace.plugins.openEditor(node.id) }
@@ -676,11 +835,13 @@ final class GraphCanvas: NSView {
                     let keys = (target.modulations ?? [:]).keys.sorted()
                     if keys.indices.contains(-portIndex-1) { connectModulation(source:id,target:target.id,key:keys[-portIndex-1],output:input) }
                 } else { modulationMenu(source:id,target:target,event:event,output:input) }
-            } else if !out,input < 0,case let (source,true,sourceOutput)? = hitPort(p),workspace.graph.node(source)?.kind.outputType == .control,let target = workspace.graph.node(id) {
+            } else if !out,input < 0,case let (source,true,sourceOutput)? = hitPort(p),workspace.graph.node(source)?.kind.outputType(at:sourceOutput) == .control,let target = workspace.graph.node(id) {
                 let keys = (target.modulations ?? [:]).keys.sorted()
                 if keys.indices.contains(-input-1) { connectModulation(source:source,target:id,key:keys[-input-1],output:sourceOutput) }
             } else if let (other,otherOut,otherInput) = hitPort(p), otherOut != out {
                 workspace.edit("Connect Nodes") { try $0.connect(out ? id : other, to:out ? other : id,input:out ? otherInput : input,output:out ? input : otherInput) }
+            } else if input >= 0, case .empty = quickEndpoint(p), let anchor = workspace.graph.node(id) {
+                showCompatibleNodes(anchor:anchor,fromOutput:out,index:input,at:p)
             }
         case let .nodes(id,_,_):
             if let hoverEdge { workspace.edit("Insert Node") { try $0.insert(id,on:hoverEdge) } }
@@ -688,6 +849,60 @@ final class GraphCanvas: NSView {
         default: break
         }
         drag = nil; hoverEdge = nil; sync(); needsDisplay = true
+    }
+    private struct ConnectionChoice {
+        let entry: CatalogNode
+        let anchor: UUID
+        let fromOutput: Bool
+        let anchorPort: Int
+        let newPort: Int
+        let parameter: String?
+        let position: Position
+    }
+    private func showCompatibleNodes(anchor: Node, fromOutput: Bool, index: Int, at point: NSPoint) {
+        guard index >= 0 else { return }
+        let type = socketType(Socket(id:anchor.id,output:fromOutput,index:index))
+        guard let type else { return }
+        let menu = NSMenu()
+        for entry in CatalogNode.all.sorted(by:{ $0.title.localizedStandardCompare($1.title) == .orderedAscending }) {
+            let choices = NSMenu()
+            for option in entry.connectionOptions(for:type,fromOutput:fromOutput) {
+                let item = choices.addItem(withTitle:option.name,action:#selector(addConnectedNode(_:)),keyEquivalent:"")
+                item.target = self
+                item.representedObject = ConnectionChoice(entry:entry,anchor:anchor.id,fromOutput:fromOutput,anchorPort:index,newPort:option.index ?? 0,parameter:option.parameter,position:.init(point.x,point.y))
+            }
+            if !choices.items.isEmpty {
+                menu.addItem(withTitle:entry.title,action:nil,keyEquivalent:"").submenu = choices
+            }
+        }
+        if menu.items.isEmpty { menu.addItem(withTitle:"No compatible nodes",action:nil,keyEquivalent:"") }
+        let location = screen(point)
+        menu.popUp(positioning:nil,at:.init(x:min(bounds.maxX-12,max(12,location.x)),y:min(bounds.maxY-12,max(12,location.y))),in:self)
+    }
+    @objc private func addConnectedNode(_ sender: NSMenuItem) {
+        guard let choice = sender.representedObject as? ConnectionChoice else { return }
+        let id = UUID()
+        workspace.edit("Add Connected Node") { graph in
+            var node = Node(kind:choice.entry.kind,position:choice.position,id:id)
+            node.fieldParameters = choice.entry.fieldParameters
+            node.file = choice.entry.file?.path
+            node.controlStyle = choice.entry.controlStyle
+            node.name = graph.availableName(choice.entry.title)
+            if !choice.fromOutput { node.position.x -= node.canvasWidth }
+            node.position.y -= 51 + Double(choice.newPort)*25
+            // The drop locates the chosen socket; keep the new card clear of nearby cards.
+            let occupied = (visibleNodes.map(rect) + graph.groups.filter(\.collapsed).map(componentRect)).sorted { $0.minY < $1.minY }
+            for box in occupied where rect(node).intersects(box.insetBy(dx:-6,dy:-6)) { node.position.y = box.maxY + 16 }
+            graph.nodes.append(node)
+            if let key = choice.parameter {
+                try graph.modulate(node.id,key:key,source:choice.anchor,minimum:nil,maximum:nil,output:choice.anchorPort)
+            } else if choice.fromOutput {
+                try graph.connect(choice.anchor,to:node.id,input:choice.newPort,output:choice.anchorPort)
+            } else {
+                try graph.connect(node.id,to:choice.anchor,input:choice.anchorPort,output:choice.newPort)
+            }
+        }
+        if workspace.graph.node(id) != nil { workspace.selected = id; inspectedSocket = nil }
     }
     func connectModulation(source: UUID,target: UUID,key: String,output: Int = 0) {
         let old = workspace.graph.node(target)?.modulations?[key]
@@ -721,6 +936,9 @@ final class GraphCanvas: NSView {
         item(workspace.previewVisible ? "Close Preview" : "Preview",#selector(contextPreview),hasSelection)
         if workspace.selected.flatMap({ workspace.graph.node($0)?.kind }) == .apc40 { item("Pop out APC40",#selector(contextAPCWindow)) }
         if let app = workspace.selected.flatMap({ workspace.graph.node($0) }).flatMap(NodeApp.for) { item("Open \(app.title)",#selector(contextPinPreview)) }
+        item("Trace Inputs",#selector(traceInputs),workspace.selected.flatMap(workspace.graph.node) != nil)
+        item("Trace Destinations",#selector(traceOutputs),workspace.selected.flatMap(workspace.graph.node) != nil)
+        if trace != nil { item("Clear Trace",#selector(clearTrace)) }
         item("Keep Preview Open",#selector(contextPinPreview),hasSelection)
         item("Copy",#selector(copy(_:)),workspace.graph.node(workspace.selected ?? UUID()) != nil)
         item("Duplicate",#selector(contextDuplicate),workspace.graph.node(workspace.selected ?? UUID()) != nil)
@@ -729,15 +947,23 @@ final class GraphCanvas: NSView {
         item("Add Node…",#selector(contextAdd))
         item("Paste",#selector(paste(_:)),NSPasteboard.general.data(forType:Workspace.nodePasteboardType) != nil)
         item("Select All",#selector(contextSelectAll))
+        let labels = NSMenuItem(title:"Large Canvas Text",action:#selector(toggleLabelSize),keyEquivalent:"")
+        labels.target = self; labels.state = largeLabels ? .on : .off; menu.addItem(labels)
+        item("Frame Selection",#selector(frameSelection),hasSelection)
         item("Frame Whole Graph",#selector(contextFrame))
         item("Auto Layout",#selector(contextLayout))
         menu.addItem(.separator())
         item("Create Component",#selector(contextComponent),workspace.selectedIDs.count > 1)
         let group = workspace.selected.flatMap { workspace.graph.component($0) }
+        item("Extract Subpatch",#selector(extractSubpatch),workspace.selectedIDs.count > 1 || (group != nil && group?.interface == nil))
+        item("Insert Subpatch…",#selector(importSubpatch))
         item(group?.collapsed == true ? "Expand Component" : "Collapse Component",#selector(contextToggle),group != nil)
         item("Ungroup Component",#selector(contextUngroup),group != nil)
         NSMenu.popUpContextMenu(menu,with:event,for:self)
     }
+    @objc private func traceInputs() { trace = workspace.selected.map { ($0,true) }; needsDisplay = true }
+    @objc private func traceOutputs() { trace = workspace.selected.map { ($0,false) }; needsDisplay = true }
+    @objc private func clearTrace() { trace = nil; needsDisplay = true }
     @objc private func contextDelete() { workspace.deleteSelection() }
     @objc private func contextDuplicate() { workspace.duplicate() }
     @objc private func contextAPCWindow() { if let id = workspace.selected { workspace.onAPCWindow?(id) } }
@@ -747,6 +973,20 @@ final class GraphCanvas: NSView {
     @objc private func contextSelectAll() { workspace.selectAll(visibleNodes.map(\.id)+workspace.graph.groups.filter(\.collapsed).map(\.id)) }
     @objc private func contextFrame() { fit() }
     @objc private func contextLayout() { workspace.autoLayout(); fit() }
+    @objc private func extractSubpatch() { workspace.extractSubpatch() }
+    @objc private func importSubpatch() { workspace.importSubpatch(at:insertionPoint) }
+    @objc private func toggleLabelSize() { largeLabels.toggle(); needsDisplay = true }
+    @objc private func frameSelection() {
+        let boxes = workspace.selectedIDs.compactMap { id -> NSRect? in
+            if let group = workspace.graph.component(id) ?? workspace.graph.collapsedOwner(id) { return componentRect(group) }
+            return workspace.graph.node(id).map(rect)
+        }
+        guard let first = boxes.first else { return }
+        let area = boxes.dropFirst().reduce(first) { $0.union($1) }
+        zoom = min(1.5,max(0.05,min((bounds.width-80)/area.width,(bounds.height-80)/area.height)))
+        offset = .init(x:bounds.midX-area.midX*zoom,y:bounds.midY-area.midY*zoom)
+        sync(); onViewportChange?()
+    }
     @objc private func contextComponent() { workspace.collapseSelection() }
     @objc private func contextToggle() { if let id = workspace.selected { workspace.toggleComponent(id) } }
     @objc private func contextUngroup() { if let id = workspace.selected { workspace.ungroup(id) } }
@@ -755,8 +995,16 @@ final class GraphCanvas: NSView {
     override func otherMouseUp(with event: NSEvent) { drag = nil }
     override func mouseMoved(with event: NSEvent) {
         cursor = convert(event.locationInWindow,from:nil)
-        let hover = hitPort(world(cursor)).flatMap { workspace.graph.node($0.0)?.kind == .apc40 && $0.1 ? $0.2 : nil }
-        if hover != hoverAPC { hoverAPC = hover; needsDisplay = true }
+        let p = world(cursor)
+        let socket = hitPort(p).map { Socket(id:$0.0,output:$0.1,index:$0.2) }
+        let insideCard = visibleNodes.contains { rect($0).contains(p) } || workspace.graph.groups.contains { $0.collapsed && componentRect($0).contains(p) }
+        let edge = socket == nil && !insideCard ? hitCable(p) : nil
+        if hoveredSocket != socket || hoverEdge != edge {
+            hoveredSocket = socket; hoverEdge = edge; needsDisplay = true
+        }
+    }
+    override func mouseExited(with event: NSEvent) {
+        hoveredSocket = nil; hoverEdge = nil; needsDisplay = true
     }
     override func scrollWheel(with event: NSEvent) {
         if event.modifierFlags.contains(.command) { changeZoom(zoom * exp(event.scrollingDeltaY * 0.01), at: convert(event.locationInWindow,from:nil)) }
@@ -799,7 +1047,7 @@ final class GraphCanvas: NSView {
             guard !ports.isEmpty else { return super.performKeyEquivalent(with:event) }
             let mode = ports.allSatisfy(\.listed) ? "off" : "on"
             workspace.edit(mode == "on" ? "Publish Output" : "Unpublish Output") { graph in
-                for port in ports { try graph.publish(port.nodeID,port:port.port,mode:mode,name:graph.node(port.nodeID)?.publications?[String(port.port)]?.name) }
+                for port in ports { try graph.publish(port.nodeID,portID:port.portID,mode:mode,name:graph.node(port.nodeID)?.publications?[port.portID]?.name) }
             }
             workspace.message = (mode == "on" ? "Published " : "Unpublished ") + ports.map(\.name).sorted().joined(separator:", ")
             needsDisplay = true
@@ -837,14 +1085,33 @@ final class GraphCanvas: NSView {
             if event.keyCode == 53 { drag = nil; needsDisplay = true; workspace.message = "Slice cancelled" }
             return
         }
+        if event.keyCode == 48, let id = workspace.selected, let node = workspace.graph.node(id), workspace.graph.collapsedOwner(id) == nil {
+            let sockets = node.inputs.indices.map { Socket(id:id,output:false,index:$0) } + node.kind.outputs.indices.map { Socket(id:id,output:true,index:$0) }
+            if !sockets.isEmpty {
+                if compact { frameSelection() }
+                let backwards = event.modifierFlags.contains(.shift)
+                let current = inspectedSocket.flatMap(sockets.firstIndex(of:)) ?? (backwards ? 0 : -1)
+                inspectedSocket = sockets[(current + (backwards ? -1 : 1) + sockets.count) % sockets.count]
+                hoveredSocket = nil; hoverEdge = nil; selectedEdge = nil
+                setAccessibilityValue(inspectionLabel())
+                needsDisplay = true
+                return
+            }
+        }
+        if [36,76].contains(event.keyCode), let socket = inspectedSocket, socket.index >= 0,
+           let node = workspace.graph.node(socket.id), socketType(socket) != nil {
+            let anchor = port(node,output:socket.output,input:socket.index)
+            showCompatibleNodes(anchor:node,fromOutput:socket.output,index:socket.index,at:.init(x:anchor.x+(socket.output ? 72 : -72),y:anchor.y))
+            return
+        }
         switch event.keyCode {
         case 49: if !event.isARepeat { workspace.onPreview?() }
         case 51,117:
             if let selectedEdge { workspace.edit("Delete Cable") { $0.edges.removeAll { $0.id == selectedEdge } }; self.selectedEdge = nil }
             else { workspace.deleteSelection() }
-        case 53: drag = nil; selectedEdge = nil; workspace.selected = nil; needsDisplay = true
+        case 53: inspectedSocket = nil; trace = nil; drag = nil; selectedEdge = nil; workspace.selected = nil; needsDisplay = true
         default:
-            if event.charactersIgnoringModifiers?.lowercased() == "f" { fit() }
+            if event.charactersIgnoringModifiers?.lowercased() == "f" { if event.modifierFlags.contains(.shift) { frameSelection() } else { fit() } }
             else { super.keyDown(with:event) }
         }
     }

@@ -42,7 +42,7 @@ final class Workspace: ObservableObject {
         finishPendingGesture()
         dismissLibraryPreview()
         var temporary = graph
-        var node = Node(kind:entry.kind); node.file = entry.file?.path; node.controlStyle = entry.controlStyle; node.name = entry.title
+        var node = Node(kind:entry.kind); node.fieldParameters = entry.fieldParameters; node.file = entry.file?.path; node.controlStyle = entry.controlStyle; node.name = entry.title
         // Browsing an output must not open windows, publish streams, or start recording.
         if node.kind.isOutput || node.kind == .webcam || node.kind == .microphone || node.kind == .audioInput { node.enabled = false }
         let selectedNode = graph.previewNode(selected)
@@ -89,6 +89,32 @@ final class Workspace: ObservableObject {
     }
     func collapseSelection() {
         edit("Create Component") { selected = try $0.makeComponent(selectedIDs) }
+    }
+    func extractSubpatch() {
+        edit("Extract Subpatch") { graph in selected = try graph.extractSubpatch(selectedIDs) }
+    }
+    func instantiateSubpatch(_ template: SubpatchTemplate, at position: Position, includeMIDI: Bool, enableOutputs: Bool = false) {
+        edit("Insert Subpatch") { graph in selected = try graph.instantiate(template,at:position,includeMIDI:includeMIDI,enableOutputs:enableOutputs) }
+    }
+    func exportSubpatch(_ id: UUID) {
+        do {
+            let template = try graph.subpatchTemplate(id)
+            let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.directoryURL = Self.projectsDirectory
+            panel.nameFieldStringValue = template.component.name+".subpatch.json"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]
+            try encoder.encode(template).write(to:url,options:.atomic)
+        } catch { message = error.localizedDescription }
+    }
+    func importSubpatch(at position: Position) {
+        let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]; panel.directoryURL = Self.projectsDirectory
+        let midi = NSButton(checkboxWithTitle:"Include MIDI mappings",target:nil,action:nil)
+        let outputs = NSButton(checkboxWithTitle:"Activate devices and outputs",target:nil,action:nil)
+        let options = NSStackView(views:[outputs,midi]); options.orientation = .vertical; options.alignment = .leading
+        panel.accessoryView = options
+        guard panel.runModal() == .OK,let url = panel.url else { return }
+        do { instantiateSubpatch(try SubpatchTemplate.read(Data(contentsOf:url)),at:position,includeMIDI:midi.state == .on,enableOutputs:outputs.state == .on) }
+        catch { message = error.localizedDescription }
     }
     func toggleComponent(_ id: UUID) { edit("Toggle Component") { g in if let i = g.components?.firstIndex(where:{ $0.id == id }) { g.components![i].collapsed.toggle() } } }
     func ungroup(_ id: UUID) { edit("Ungroup Component") { $0.components?.removeAll { $0.id == id } } }
@@ -207,7 +233,7 @@ final class Workspace: ObservableObject {
     }
     func addUserNode(_ entry: CatalogNode, at position: Position) {
         var node = libraryCatalogID == entry.id ? (libraryPreviewNode ?? Node(kind:entry.kind)) : Node(kind:entry.kind)
-        node.position = position; node.file = entry.file?.path; node.controlStyle = entry.controlStyle
+        node.fieldParameters = entry.fieldParameters; node.position = position; node.file = entry.file?.path; node.controlStyle = entry.controlStyle
         if libraryCatalogID != entry.id { node.name = entry.title }
         edit("Add \(entry.title)") { $0.nodes.append(node); selected = node.id }
     }
@@ -320,7 +346,7 @@ final class Workspace: ObservableObject {
         do { try load(url) } catch { message = error.localizedDescription }
     }
     func load(_ url: URL) throws {
-        let next = try JSONDecoder().decode(Graph.self, from: Data(contentsOf: url)).validated()
+        let next = try Graph.read(Data(contentsOf:url))
         finishPendingGesture()
         try apply(next, action: "Open Project"); undo.removeAllActions(); selected = next.nodes.first?.id; fileURL = url; dirty = false; remember(url); onDocumentChange?()
     }
