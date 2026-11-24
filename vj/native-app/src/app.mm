@@ -1,6 +1,7 @@
 #include "syphon_input.hpp"
 #import <PatchKit.h>
 #import "app.hpp"
+#include "library_placement.hpp"
 #import "show_library.hpp"
 #include "native_async.hpp"
 #import "native_style.hpp"
@@ -260,7 +261,7 @@ static NSFont* previewFont(const std::string& name){
         }command.erase("kind");self.gridCommand(command);return YES;
     }
     raw=[sender.draggingPasteboard stringForType:@"com.vibe.clip"];if(!raw||pt.y<25||pt.x<150||visual<0||visual>=int(document["rows"].size())||column<0||column>=int(document["columns"].size()))return NO;
-    auto command=Json::parse(raw.UTF8String,nullptr,false);if(!command.is_object()||!command.contains("effect"))return NO;
+    auto command=Json::parse(raw.UTF8String,nullptr,false);if(!command.is_object()||(!command.contains("effect")&&!command.contains("subpatchID")))return NO;
     const auto row=document["rows"][document["rows"].size()-1-visual]["id"],col=document["columns"][column]["id"];
     command.update({{"action","put_clip"},{"row",row},{"column",col}});self.gridCommand(command);if(self.choose)self.choose(text(row),text(col));return YES;
 }
@@ -309,9 +310,38 @@ static BOOL checkHitTargets(NSView* root) {
         for(NSView* child in view.subviews)inspect(child);
     };inspect(root);NSLog(@"Hit targets: %lu checked, %@",(unsigned long)checked,valid?@"pass":@"FAIL");return valid;
 }
+@interface VJPatchLoopbackDelegate : NSObject <NSURLSessionTaskDelegate>
+@end
+@implementation VJPatchLoopbackDelegate
+- (void)URLSession:(NSURLSession*)session task:(NSURLSessionTask*)task willPerformHTTPRedirection:(NSHTTPURLResponse*)response newRequest:(NSURLRequest*)request completionHandler:(void (^)(NSURLRequest*))completion {
+    completion(nil);
+}
+@end
+
+using PatchInventory=std::shared_ptr<const Json>;
+static Json patchRows(NSArray* rows) {
+    if(!rows.count)return Json::array();
+    NSData* data=[NSJSONSerialization dataWithJSONObject:rows options:0 error:nil];
+    if(!data)return Json::array();
+    const auto* begin=static_cast<const uint8_t*>(data.bytes);
+    auto parsed=Json::parse(begin,begin+data.length,nullptr,false);
+    return parsed.is_array()?std::move(parsed):Json::array();
+}
+static void appendPatchRows(Json& result,std::set<std::string>& seen,const Json& rows) {
+    for(const auto& row:rows){
+        if(!row.is_object()||!row.contains("id")||!row["id"].is_string())continue;
+        if(seen.insert(row["id"].get<std::string>()).second)result.push_back(row);
+    }
+}
 @implementation VJApplication {
     vj::Model* _model;unsigned short _port;NSWindow* _window;NSStackView* _root;NSStackView* _toolbar;NSStackView* _inspector;
-    Json _standalonePalettes;std::string _paletteShape;BOOL _paletteRequest;NSURLSession* _paletteSession;
+    PatchInventory _standaloneOutputs,_standalonePalettes;
+    std::shared_ptr<const std::set<std::string>> _standaloneIDs;
+    Json _retainedPatchIDs;
+    std::string _paletteShape;
+    BOOL _paletteRequest,_outputsRequest,_mergingPatchOutputs;
+    NSTimeInterval _nextPeerOutputs,_nextPeerPalettes,_nextPatchMerge,_nextPaletteMerge;
+    NSURLSession* _paletteSession;
     PatchEditorController* _patch;NSView* _patchContainer;BOOL _patchActive;NSError* _patchError;
     NSSplitView* _workspaceSplit;NSView* _composerPane;BOOL _splitMode;CGFloat _splitFraction;id _paneMonitor;NSLayoutConstraint* _gridMinHeight;NSTimer* _faderPoll;
     VJControls* _controlsView;bool _controls;VJPerformanceBar* _performance;
@@ -319,7 +349,7 @@ static BOOL checkHitTargets(NSView* root) {
     VJMetaMapping* _metaView;VJMapper* _mapperView;NSStackView* _composerBody;VJComposeMonitors* _monitors;VJSidePanel* _libraryPanel;VJSidePanel* _clipPanel;NSStackView* _nav;VJFlowBar* _outStrip;NSLayoutConstraint* _outStripHeight;VJCanvas* _canvas;VJPreview* _preview;NSTextField* _status;NSPopUpButton* _out;NSPopUpButton* _show;NSPopUpButton* _effect;NSPopUpButton* _bank;NSPopUpButton* _projector;
     VJParameterSlider* _fade;BOOL _faderTracking,_faderPending;uint64_t _faderGeneration;std::string _outStripShape;NSButton* _transport;NSButton* _faderSync;id _keyboardMonitor;bool _inspectorDirty;NSScrollView* _inspectorScroll;std::string _inspectorShape;NSTimer* _poll;Json _snapshot;uint64_t _revision;bool _mapping,_editing;BOOL _selectionPending,_closing;uint64_t _selectionGeneration;std::string _row,_column,_surface,_mid;
 }
-- (instancetype)initWithModel:(vj::Model*)model port:(unsigned short)port address:(NSString*)address{self=[super init];if(self){_standalonePalettes=Json::array();_model=model;_port=port;_address=[address copy];_revision=UINT64_MAX;_mid="1";}return self;}
+- (instancetype)initWithModel:(vj::Model*)model port:(unsigned short)port address:(NSString*)address{self=[super init];if(self){_model=model;_port=port;_address=[address copy];_revision=UINT64_MAX;_mid="1";}return self;}
 - (NSStackView*)stack:(NSUserInterfaceLayoutOrientation)orientation {return vj::style::stack(orientation);}
 - (NSTextField*)label:(NSString*)value {return vj::style::label(value);}
 - (NSButton*)button:(NSString*)title action:(SEL)action {return vj::style::button(title,self,action);}
@@ -330,8 +360,8 @@ static BOOL checkHitTargets(NSView* root) {
 - (void)applicationDidFinishLaunching:(NSNotification*)notification {(void)notification;if(_checking)return;
     NSString* page=[NSUserDefaults.standardUserDefaults stringForKey:@"VJWorkspacePage"]?:@"Compose";
     [self build];
-    NSDictionary* actions=@{@"Mapping":@"mapping:",@"Meta Mapping":@"metaMapping:",@"Compose":@"compose:",@"LEDs":@"leds:",@"DMX":@"dmx:",@"Mix":@"mix:",@"Settings":@"settings:",@"patch":@"patch:",@"Compose + patch":@"toggleComposerPatch:"};
-    NSString* action=actions[page]?:@"compose:";[self performSelector:NSSelectorFromString(action) withObject:nil];
+    NSDictionary* actions=@{@"Mapping":@"mapping:",@"Compose":@"compose:",@"Patch":@"patch:",@"Lights":@"lights:",@"Mixer":@"mix:",@"Settings":@"settings:",@"Compose + patch":@"toggleComposerPatch:",@"Meta Mapping":@"mapping:",@"patch":@"patch:",@"LEDs":@"leds:",@"DMX":@"dmx:",@"Mix":@"mix:"};
+    NSString* action=actions[page]?:@"compose:";[NSApp sendAction:NSSelectorFromString(action) to:self from:nil];
     [_window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
 - (void)build {
     VJInstallControlStyle();
@@ -341,8 +371,7 @@ static BOOL checkHitTargets(NSView* root) {
     _root=[self stack:NSUserInterfaceLayoutOrientationVertical];_root.edgeInsets=NSEdgeInsetsMake(0,0,0,0);_root.spacing=0;_root.wantsLayer=YES;_root.layer.backgroundColor=vj::style::background().CGColor;_root.translatesAutoresizingMaskIntoConstraints=NO;[_window.contentView addSubview:_root];
     [NSLayoutConstraint activateConstraints:@[[_root.leadingAnchor constraintEqualToAnchor:_window.contentView.leadingAnchor],[_root.trailingAnchor constraintEqualToAnchor:_window.contentView.trailingAnchor],[_root.topAnchor constraintEqualToAnchor:_window.contentView.topAnchor],[_root.bottomAnchor constraintEqualToAnchor:_window.contentView.bottomAnchor]]];
     auto nav=[self stack:NSUserInterfaceLayoutOrientationHorizontal];_nav=nav;nav.spacing=1;nav.edgeInsets=NSEdgeInsetsMake(5,8,5,8);nav.wantsLayer=YES;nav.layer.backgroundColor=vj::style::panel().CGColor;auto brand=[self label:@"VJ"];brand.font=vj::style::font(16);[nav addArrangedSubview:brand];[nav setCustomSpacing:10 afterView:brand];
-    for(NSArray* item in @[@[@"Mapping",@"mapping:"],@[@"Meta Mapping",@"metaMapping:"],@[@"Compose",@"compose:"],@[@"LEDs",@"leds:"],@[@"DMX",@"dmx:"],@[@"Mix",@"mix:"],@[@"Settings",@"settings:"]]){auto button=[self button:item[0] action:NSSelectorFromString(item[1])];button.identifier=[@"tab-" stringByAppendingString:item[0]];button.buttonType=NSButtonTypePushOnPushOff;button.state=[item[0] isEqualToString:@"Compose"]?NSControlStateValueOn:NSControlStateValueOff;button.font=vj::style::font(12);[nav addArrangedSubview:button];}
-    auto patchButton=[self button:@"patch" action:@selector(patch:)];patchButton.identifier=@"tab-patch";patchButton.buttonType=NSButtonTypePushOnPushOff;patchButton.font=[NSFont systemFontOfSize:16 weight:NSFontWeightBold];patchButton.contentTintColor=NSColor.whiteColor;patchButton.accessibilityLabel=@"Patch";[nav setCustomSpacing:18 afterView:nav.arrangedSubviews.lastObject];[nav addArrangedSubview:patchButton];
+    for(NSArray* item in @[@[@"Mapping",@"mapping:"],@[@"Compose",@"compose:"],@[@"Patch",@"patch:"],@[@"Lights",@"lights:"],@[@"Mixer",@"mix:"],@[@"Settings",@"settings:"]]){auto button=[self button:item[0] action:NSSelectorFromString(item[1])];button.identifier=[@"tab-" stringByAppendingString:item[0]];button.buttonType=NSButtonTypePushOnPushOff;button.state=[item[0] isEqualToString:@"Compose"]?NSControlStateValueOn:NSControlStateValueOff;button.font=vj::style::font(12);[nav addArrangedSubview:button];}
     [nav addArrangedSubview:[self button:@"Projector preview" action:@selector(projectorPreview:)]];
     auto spacer=[[NSView alloc]init];[nav addArrangedSubview:spacer];[spacer.widthAnchor constraintGreaterThanOrEqualToConstant:10].active=YES;auto showLabel=[self label:@"Show"];showLabel.textColor=NSColor.secondaryLabelColor;[nav addArrangedSubview:showLabel];[nav setCustomSpacing:6 afterView:showLabel];auto showLibrary=[[VJShowLibraryPicker alloc]initWithRoot:_model->stateRoot()];showLibrary.identifier=@"show-library";showLibrary.font=vj::style::font(12);[nav addArrangedSubview:showLibrary];[_root addArrangedSubview:nav];[nav.widthAnchor constraintEqualToAnchor:_root.widthAnchor].active=YES;[nav.heightAnchor constraintEqualToConstant:38].active=YES;
     _toolbar=[self stack:NSUserInterfaceLayoutOrientationVertical];_toolbar.spacing=0;
@@ -377,7 +406,7 @@ static BOOL checkHitTargets(NSView* root) {
     _controlsView.settingsAction=^(NSString* action){if([action isEqualToString:@"Outputs…"])[weak outputs:nil];else if([action isEqualToString:@"Network…"])[weak network:nil];};
     [_library setLivePreviewsEnabled:!_checking];_library.sourcesChanged=^{VJApplication* owner=weak;if(!owner||owner->_editing)return;owner->_inspectorShape.clear();[owner inspector];};
     _library.inventoryChanged=^{VJApplication* owner=weak;if(owner&&owner->_clipSearch.window.visible)[owner->_clipSearch updateItems:[owner->_library searchItems]];};
-    _library.insert=^(Json item){VJApplication* owner=weak;if(!owner||owner->_row.empty()||owner->_column.empty())return;item.update({{"action","put_clip"},{"row",owner->_row},{"column",owner->_column}});[owner submit:item path:"/api/v1/grid" method:"POST"];};_library.browse=^{[weak media:nil];};_library.assignOutput=^(Json item,NSView* anchor){[weak assignPatchOutput:item anchor:anchor];};
+    _library.insert=^(Json item){VJApplication* owner=weak;if(!owner)return;if(owner->_row.empty()||owner->_column.empty()){owner->_status.stringValue=@"Select a clip slot";owner->_status.hidden=NO;return;}item.update({{"action","put_clip"},{"row",owner->_row},{"column",owner->_column}});[owner submit:item path:"/api/v1/grid" method:"POST"];};_library.browse=^{[weak media:nil];};_library.assignOutput=^(Json item,NSView* anchor){[weak assignPatchOutput:item anchor:anchor];};
     _canvas.choose=^(NSString* row,NSString* column){VJApplication* owner=weak;if(!owner)return;owner->_row=row.UTF8String;owner->_column=column.UTF8String;owner->_canvas->selectedRow=owner->_row;owner->_canvas->selectedColumn=owner->_column;[owner->_canvas setNeedsDisplay:YES];owner->_selectionPending=YES;auto generation=++owner->_selectionGeneration;
         Json command={{"action","select_cell"},{"bus",[owner bus]},{"row",owner->_row},{"column",owner->_column},{"active_show",owner->_snapshot["state"]["grid"]["active_show"]},{"revision",owner->_revision}};
         VJSubmitUiCommand(owner->_model,"POST","/api/v1/grid",command,^(const vj::Reply& reply){VJApplication* current=weak;if(!current||current->_closing||generation!=current->_selectionGeneration)return;current->_selectionPending=NO;current->_revision=UINT64_MAX;if(reply.status>=300){current->_status.hidden=NO;current->_status.stringValue=text(reply.body.value("error",std::string("Selection failed")));}[current refresh];});
@@ -452,7 +481,7 @@ static BOOL checkHitTargets(NSView* root) {
     for(int direction:{1,-1}){auto button=[self button:direction>0?@"+":@"−" action:@selector(resizeOuts:)];button.tag=direction;[_outStrip addItem:button width:24];}
     [_outStrip addItem:[self label:@"A"] width:9];[_outStrip addItem:_fade width:150];[_outStrip addItem:[self label:@"B"] width:9];[_outStrip addItem:_faderSync width:112];double width=20;for(NSView* view in _outStrip.subviews)width+=view.frame.size.width+6;_outStrip.frame=NSMakeRect(0,0,width,height+16);_outStripHeight.constant=height+16;vj::style::apply(_outStrip);
 }
-- (void)selectNavigation:(NSString*)title {if(!_checking)[NSUserDefaults.standardUserDefaults setObject:title forKey:@"VJWorkspacePage"];_metaView.hidden=![title isEqualToString:@"Meta Mapping"];[self setWorkspaceLayout:[title isEqual:@"Compose"]?0:[title isEqual:@"patch"]?1:3];if(![title isEqual:@"patch"]&&_patchActive){_patchActive=NO;[_patch setEditorActive:NO];_patchContainer.hidden=YES;_window.minSize=NSMakeSize(900,620);[_window makeFirstResponder:nil];}for(NSView* view in _nav.arrangedSubviews)if([view isKindOfClass:NSButton.class]&&[view.identifier hasPrefix:@"tab-"]){((NSButton*)view).state=[view.identifier isEqualToString:[@"tab-" stringByAppendingString:title]]?NSControlStateValueOn:NSControlStateValueOff;[view setNeedsDisplay:YES];}}
+- (void)selectNavigation:(NSString*)title {if(!_checking)[NSUserDefaults.standardUserDefaults setObject:title forKey:@"VJWorkspacePage"];_metaView.hidden=![title isEqualToString:@"Meta Mapping"];[self setWorkspaceLayout:[title isEqual:@"Compose"]?0:[title isEqual:@"Patch"]?1:3];if(![title isEqual:@"Patch"]&&_patchActive){_patchActive=NO;[_patch setEditorActive:NO];_patchContainer.hidden=YES;_window.minSize=NSMakeSize(900,620);[_window makeFirstResponder:nil];}for(NSView* view in _nav.arrangedSubviews)if([view isKindOfClass:NSButton.class]&&[view.identifier hasPrefix:@"tab-"]){((NSButton*)view).state=[view.identifier isEqualToString:[@"tab-" stringByAppendingString:title]]?NSControlStateValueOn:NSControlStateValueOff;[view setNeedsDisplay:YES];}}
 - (std::string)bus {NSString* item=_out.selectedItem.representedObject;return item?[item UTF8String]:"program";}
 - (void)assignPatchOutput:(Json)item anchor:(NSView*)anchor {
     auto snapshot=_model->presentationSnapshot();Json clip;
@@ -461,40 +490,134 @@ static BOOL checkHitTargets(NSView* root) {
     if(clip.is_object())for(const auto& effect:_model->effectCatalog())if(effect["name"]==clip["gen"])for(const auto& p:effect["parameters"]){
         bool palette=item["patchType"]=="palette";if(palette?!p.value("paletteSource",false):(p["kind"]!="float"||effect.value("vector",false)||clip["gen"].get<std::string>().starts_with("external_")))continue;
         Json command={{"action","set_clip"},{"row",_row},{"column",_column}};auto key=p["name"].get<std::string>();
-        if(palette)command["params"]={{key,item["patchID"]}};else{auto bindings=clip.value("patchControls",Json::object());bindings[key]={{"source",item["patchID"]},{"min",p["min"]},{"max",p["max"]}};command["patchControls"]=bindings;}
+        if(item.contains("subpatchID")){
+            command.update({{"subpatchID",item["subpatchID"]},{"outputID",item["outputID"]},{"parameter",key},{"revision",snapshot["revision"]},{"active_show",snapshot["state"]["grid"]["active_show"]}});
+        }else if(palette)command["params"]={{key,item["patchID"]}};else{auto bindings=clip.value("patchControls",Json::object());bindings[key]={{"source",item["patchID"]},{"min",p["min"]},{"max",p["max"]}};command["patchControls"]=bindings;}
         auto entry=[[NSMenuItem alloc]initWithTitle:text(p.value("label",key)) action:@selector(assignPatchParameter:) keyEquivalent:@""];entry.target=self;entry.representedObject=text(command.dump());[menu addItem:entry];
     }
     if(!menu.numberOfItems){auto entry=[[NSMenuItem alloc]initWithTitle:@"No compatible parameter" action:nil keyEquivalent:@""];entry.enabled=NO;[menu addItem:entry];}
     [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(0,anchor.bounds.size.height) inView:anchor];
 }
 - (void)assignPatchParameter:(NSMenuItem*)sender {[self submit:Json::parse([sender.representedObject UTF8String]) path:"/api/v1/grid" method:"POST"];}
-- (void)refreshPatchOutputs {
-    if(!_patch||_closing)return;
-    if(_patch){auto ids=_model->patchReferences();NSMutableArray* refs=[NSMutableArray array];for(const auto& id:ids)[refs addObject:text(id)];[_patch retainPublishedOutputs:refs];}
-    auto data=[NSJSONSerialization dataWithJSONObject:_patch.publishedOutputs options:0 error:nil];
-    if(data){auto parsed=Json::parse(std::string((const char*)data.bytes,data.length),nullptr,false);if(parsed.is_array())_model->setPatchOutputs(std::move(parsed));}
+- (void)fetchStandalonePatchRows:(BOOL)palettes {
+    if(!_paletteSession){
+        auto config=NSURLSessionConfiguration.ephemeralSessionConfiguration;
+        config.timeoutIntervalForRequest=1;config.timeoutIntervalForResource=1;
+        config.connectionProxyDictionary=@{};config.URLCache=nil;
+        _paletteSession=[NSURLSession sessionWithConfiguration:config delegate:[VJPatchLoopbackDelegate new] delegateQueue:nil];
+    }
+    NSString* value=NSProcessInfo.processInfo.environment[@"PATCH_API_PORT"];
+    NSInteger port=value?value.integerValue:9417;
+    NSInteger embeddedPort=[NSProcessInfo.processInfo.environment[@"VJ_PATCH_API_PORT"]?:@"9418" integerValue];
+    if(port<1||port>65535||port==embeddedPort)return;
+    if(palettes)_paletteRequest=YES;else _outputsRequest=YES;
+    NSURL* url=[NSURL URLWithString:[NSString stringWithFormat:@"http://127.0.0.1:%ld/v1/%@",(long)port,palettes?@"palettes":@"outputs"]];
+    auto session=_paletteSession;
+    auto previous=palettes?_standalonePalettes:_standaloneOutputs;
+    __weak VJApplication* weak=self;
+    auto receive=^(NSData* data,NSURLResponse* response,NSError* error){
+        PatchInventory found;
+        if(!error&&[(NSHTTPURLResponse*)response statusCode]==200&&data.length){
+            const auto* begin=static_cast<const uint8_t*>(data.bytes);
+            auto object=Json::parse(begin,begin+data.length,nullptr,false);
+            if(object.is_object()&&object.contains("sources")&&object["sources"].is_array())
+                found=std::make_shared<const Json>(std::move(object["sources"]));
+        }
+        bool online=bool(found);
+        if(!online&&previous){
+            auto offline=std::make_shared<Json>(Json::array());
+            for(const auto& row:*previous){
+                if(!row.is_object()||!row.contains("id"))continue;
+                auto item=Json::object();
+                for(const auto* key:{"id","name","nodeID","outputID","type","kind","listed","colorSpace"})
+                    if(row.contains(key))item[key]=row[key];
+                item["available"]=false;item["active"]=false;
+                offline->push_back(std::move(item));
+            }
+            found=offline;
+        }
+        auto ids=std::make_shared<std::set<std::string>>();
+        if(!palettes&&found)for(const auto& row:*found)
+            if(row.is_object()&&row.contains("id")&&row["id"].is_string())ids->insert(row["id"].get<std::string>());
+        dispatch_async(dispatch_get_main_queue(),^{
+            VJApplication* owner=weak;if(!owner||owner->_closing)return;
+            if(palettes){owner->_standalonePalettes=found;owner->_paletteRequest=NO;}
+            else{owner->_standaloneOutputs=found;owner->_standaloneIDs=ids;owner->_outputsRequest=NO;}
+            if(!online){
+                auto retry=NSProcessInfo.processInfo.systemUptime+1.;
+                if(palettes)owner->_nextPeerPalettes=retry;else owner->_nextPeerOutputs=retry;
+            }
+        });
+    };
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{
+        NSString* token=[NSString stringWithContentsOfFile:[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/Patch/api-token"] encoding:NSUTF8StringEncoding error:nil];
+        token=[token stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if(!token.length){receive(nil,nil,nil);return;}
+        auto request=[NSMutableURLRequest requestWithURL:url];
+        [request setValue:[@"Bearer " stringByAppendingString:token] forHTTPHeaderField:@"Authorization"];
+        dispatch_async(dispatch_get_main_queue(),^{
+            VJApplication* owner=weak;if(!owner||owner->_closing)return;
+            [[session dataTaskWithRequest:request completionHandler:receive] resume];
+        });
+    });
 }
-- (void)refreshPalettes {
-    if(_closing)return;
-    Json sources=Json::array();
-    // The embedded editor exposes only published sources, without encoding the graph.
-    if(_patch){auto data=[NSJSONSerialization dataWithJSONObject:_patch.paletteSources options:0 error:nil];if(data){auto parsed=Json::parse(std::string((const char*)data.bytes,data.length),nullptr,false);if(parsed.is_array())sources=std::move(parsed);}}
-    for(const auto& source:_standalonePalettes)if(std::none_of(sources.begin(),sources.end(),[&](const Json& item){return item["id"]==source["id"];}))sources.push_back(source);
-    for(const auto& output:_model->patchOutputs())if(output.value("type",std::string{})=="palette"){auto source=output;source["kind"]="patch";sources.push_back(source);}
-    _model->setPaletteSources(sources);
-    Json shape=sources;for(auto& source:shape)source.erase("colors");auto next=shape.dump();if(next!=_paletteShape){_paletteShape=next;_inspectorDirty=true;}
-    if(_paletteRequest||_checking)return;
-    auto token=[NSString stringWithContentsOfFile:[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/Patch/api-token"] encoding:NSUTF8StringEncoding error:nil];if(!token)return;
-    if(!_paletteSession){auto config=NSURLSessionConfiguration.ephemeralSessionConfiguration;config.timeoutIntervalForRequest=1;config.timeoutIntervalForResource=1;config.connectionProxyDictionary=@{};_paletteSession=[NSURLSession sessionWithConfiguration:config];}
-    auto request=[NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"http://127.0.0.1:9417/v1/palettes"]];[request setValue:[@"Bearer " stringByAppendingString:[token stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]] forHTTPHeaderField:@"Authorization"];
-    _paletteRequest=YES;__weak VJApplication* weak=self;
-    [[_paletteSession dataTaskWithRequest:request completionHandler:^(NSData* data,NSURLResponse* response,NSError* error){
-        Json found=Json::array();if(!error&&[(NSHTTPURLResponse*)response statusCode]==200&&data){auto parsed=Json::parse(std::string((const char*)data.bytes,data.length),nullptr,false);if(parsed.is_object()&&parsed.contains("sources")&&parsed["sources"].is_array())found=parsed["sources"];}
-        dispatch_async(dispatch_get_main_queue(),^{VJApplication* owner=weak;if(!owner||owner->_closing)return;owner->_standalonePalettes=found;owner->_paletteRequest=NO;});
-    }] resume];
+- (void)refreshPatchOutputs {
+    const auto now=NSProcessInfo.processInfo.systemUptime;
+    if(_closing||_mergingPatchOutputs||now<_nextPatchMerge)return;
+    auto refs=_model->patchReferences();
+    if(_patch&&refs!=_retainedPatchIDs){
+        NSMutableArray* ids=[NSMutableArray arrayWithCapacity:refs.size()];
+        for(const auto& id:refs)[ids addObject:text(id)];
+        [_patch retainPublishedOutputs:ids];_retainedPatchIDs=refs;
+    }
+    // Dormant catalogs need only discovery updates. Active bindings carry live control and recipe values.
+    bool active=!refs.empty();
+    _nextPatchMerge=now+(active?1./30.:.2);
+    bool usesPeer=_standaloneIDs&&std::any_of(refs.begin(),refs.end(),[&](const Json& id){
+        return id.is_string()&&_standaloneIDs->contains(id.get_ref<const std::string&>());
+    });
+    if(!_checking&&!_outputsRequest&&now>=_nextPeerOutputs){
+        _nextPeerOutputs=now+(usesPeer?1./25.:.5);
+        [self fetchStandalonePatchRows:NO];
+    }
+    if(!_checking&&!_paletteRequest&&now>=_nextPeerPalettes){
+        _nextPeerPalettes=now+1.;[self fetchStandalonePatchRows:YES];
+    }
+    const bool palettes=now>=_nextPaletteMerge;
+    if(palettes)_nextPaletteMerge=now+.2;
+    NSArray* embedded=_patch.publishedOutputs,*embeddedPalettes=palettes?_patch.paletteSources:nil;
+    auto peer=_standaloneOutputs,peerPalettes=_standalonePalettes;
+    _mergingPatchOutputs=YES;
+    __weak VJApplication* weak=self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
+        auto outputs=std::make_shared<Json>(Json::array()),colors=std::make_shared<Json>(Json::array());
+        std::set<std::string> ids;
+        appendPatchRows(*outputs,ids,patchRows(embedded));
+        if(peer)appendPatchRows(*outputs,ids,*peer);
+        std::string shape;
+        if(palettes){
+            ids.clear();
+            appendPatchRows(*colors,ids,patchRows(embeddedPalettes));
+            if(peerPalettes)appendPatchRows(*colors,ids,*peerPalettes);
+            for(const auto& output:*outputs)if(output.value("type",std::string{})=="palette"&&ids.insert(output["id"]).second){
+                auto color=output;color["kind"]="patch";colors->push_back(std::move(color));
+            }
+            auto metadata=*colors;for(auto& source:metadata)source.erase("colors");
+            shape=metadata.dump();
+        }
+        dispatch_async(dispatch_get_main_queue(),^{
+            VJApplication* owner=weak;if(!owner||owner->_closing)return;
+            owner->_mergingPatchOutputs=NO;
+            owner->_model->setPatchOutputs(std::move(*outputs));
+            if(palettes){
+                owner->_model->setPaletteSources(*colors);
+                if(shape!=owner->_paletteShape){owner->_paletteShape=shape;owner->_inspectorDirty=true;}
+            }
+        });
+    });
 }
 - (void)refresh {
-    [self refreshPalettes];
+    [self refreshPatchOutputs];
     [_outputs refresh];if(_patchActive&&!_splitMode)return;
     if(_controls)[_controlsView refresh];
     if(!_metaView.hidden){[_metaView refresh];return;}
@@ -537,17 +660,30 @@ static BOOL checkHitTargets(NSView* root) {
         auto bindings=clip.value("patchControls",Json::object());
 
 
-        if(clip["gen"]=="slime_mold")[_inspector addArrangedSubview:[self button:@"Reset mold" action:@selector(resetMold:)]];
         auto actions=[[VJFlowBar alloc]init];actions.padding=NSEdgeInsetsMake(0,0,8,0);actions.spacing=5;actions.plain=YES;[_inspector addArrangedSubview:actions];[actions.widthAnchor constraintEqualToAnchor:_inspector.widthAnchor constant:-16].active=YES;
         for(const auto* bank:{"A","B"}){auto key=std::string(bank)=="A"?"selections":"selections_b";bool active=grid[key].value([self bus],Json::object()).value(_row,std::string{})==_column;[actions addItem:[self command:text(std::string(active?"Unset ":"Set ")+bank) body:{{"action","toggle_clip"},{"bank",bank},{"row",_row},{"column",_column}} path:"/api/v1/grid"] width:54];}
         auto rename=[self button:@"Rename" action:@selector(renameSelected:)];rename.identifier=@"clip";[actions addItem:rename width:57];[actions addItem:[self button:@"Duplicate" action:@selector(duplicateClip:)] width:65];[actions addItem:[self command:@"Clear slot" body:{{"action","delete_clip"},{"row",_row},{"column",_column}} path:"/api/v1/grid"] width:65];
         auto clipTitle=[self label:text(clip["name"])];clipTitle.font=vj::style::font(13);[_inspector addArrangedSubview:clipTitle];
+        if(_patch && clip.value("gen",std::string{}).starts_with("patch_")){
+            NSString* source=text(clip.at("params").value("source",std::string{}));
+            if(source.length){
+                if(NSView* controls=[_patch controlsForPublishedOutput:source]){
+                    [_inspector addArrangedSubview:controls];
+                    [controls.widthAnchor constraintEqualToAnchor:_inspector.widthAnchor constant:-16].active=YES;
+                }
+                NSButton* edit=[self button:@"Open in Patch" action:@selector(openClipPatch:)];
+                edit.identifier=source;[_inspector addArrangedSubview:edit];
+                [_inspector addArrangedSubview:[self command:@"Make Independent" body:{{"action","make_independent"}} path:"/api/v1/grid"]];
+            }
+        }
         if(!bindings.empty()){
             auto group=vj::style::section(@"Patch controls");
             for(auto it=bindings.begin();it!=bindings.end();++it){auto source=it.value().value("source",std::string{}),name=source;for(const auto& output:_model->patchOutputs())if(output["id"]==source)name=output.value("name",source);auto next=bindings;next.erase(it.key());[group addArrangedSubview:[self command:text(it.key()+" · "+name+" ×") body:{{"action","set_clip"},{"patchControls",next}} path:"/api/v1/grid"]];}
             [_inspector addArrangedSubview:group];[group.widthAnchor constraintEqualToAnchor:_inspector.widthAnchor constant:-16].active=YES;
         }
-        if(clip.value("nativeImportUnsupported",false))[_inspector addArrangedSubview:[self label:@"Imported · Unavailable"]];
+        for(const auto& note:clip.value("conversionNotes",Json::array()))
+            [_inspector addArrangedSubview:[self label:text(note.get<std::string>())]];
+        if(clip.value("nativeImportUnsupported",false))[_inspector addArrangedSubview:[self label:@"Unavailable effect"]];
         if(clip["gen"].get<std::string>().starts_with("external_")){auto update=[self button:@"Update animation…" action:@selector(importAnimation:)];update.identifier=@"update-animation";[_inspector addArrangedSubview:update];}
         if(clip["gen"]=="video"){
             auto controls=[self stack:NSUserInterfaceLayoutOrientationHorizontal];controls.distribution=NSStackViewDistributionFillEqually;controls.spacing=6;
@@ -564,10 +700,6 @@ static BOOL checkHitTargets(NSView* root) {
         auto opacity=[[VJParameterSlider alloc]init];opacity.identifier=@"_opacity";opacity.minValue=0;opacity.maxValue=1;opacity.doubleValue=clip.value("opacity",1.);opacity.continuous=YES;opacity.target=self;opacity.action=@selector(opacity:);__weak VJApplication* weak=self;opacity.tracking=^(BOOL tracking){VJApplication* owner=weak;if(owner){owner->_editing=tracking;if(!tracking){owner->_inspectorDirty=true;[owner refresh];}}};auto opacityRow=[[VJParameterRow alloc]init];opacityRow.name=[self label:@"Blend amount"];opacityRow.name.font=vj::style::font(11);opacityRow.name.textColor=vj::style::secondary();opacityRow.control=opacity;opacityRow.value=[[NSTextField alloc]init];opacityRow.value.identifier=@"_opacity_value";opacityRow.value.font=vj::style::font(11);opacityRow.value.alignment=NSTextAlignmentRight;opacityRow.value.stringValue=[NSString stringWithFormat:@"%.3g",opacity.doubleValue];opacityRow.value.target=self;opacityRow.value.action=@selector(opacity:);[opacityRow addSubview:opacityRow.value];opacityRow.reset=[self command:@"↺" body:{{"action","set_clip"},{"opacity",1.}} path:"/api/v1/grid"];[opacityRow addSubview:opacityRow.reset];[opacityRow addSubview:opacityRow.name];[opacityRow addSubview:opacity];[_inspector addArrangedSubview:opacityRow];[opacityRow.widthAnchor constraintEqualToAnchor:_inspector.widthAnchor constant:-16].active=YES;[opacityRow.heightAnchor constraintEqualToConstant:vj::style::controlHeight].active=YES;
         for(const auto& effect:_model->effectCatalog())if(effect["name"]==clip["gen"]){
             const auto generator=clip["gen"].get<std::string>();
-            if(generator=="cube"||generator=="vector_cube"||generator=="sphere_gimbal"){
-                [_inspector addArrangedSubview:[self label:@"Orientation"]];auto pose=[[VJPoseControl alloc]initWithFrame:NSMakeRect(0,0,190,150)];pose->angles={clip["params"].value("pose_x",0.),clip["params"].value("pose_y",0.),clip["params"].value("pose_z",0.)};pose.target=self;pose.action=@selector(poseChanged:);pose.toolTip=@"Drag to rotate · Shift to roll";pose.accessibilityLabel=@"Orientation · Drag or arrow keys rotate · Shift rolls";auto b=[[VJInspectorBinding alloc]init];b->parameter={{"effect",generator}};objc_setAssociatedObject(pose,&inspectorBindingKey,b,OBJC_ASSOCIATION_RETAIN_NONATOMIC);__weak VJApplication* weak=self;pose.tracking=^(BOOL tracking){VJApplication* owner=weak;if(owner){owner->_editing=tracking;if(!tracking){owner->_inspectorDirty=true;[owner refresh];}}};[_inspector addArrangedSubview:pose];[pose.widthAnchor constraintEqualToAnchor:_inspector.widthAnchor constant:-16].active=YES;[pose.heightAnchor constraintEqualToConstant:150].active=YES;Json params={{"pose_x",0},{"pose_y",0},{"pose_z",0}};if(generator!="sphere_gimbal")params["speed"]=0;[_inspector addArrangedSubview:[self command:@"Reset orientation" body:{{"action","set_clip"},{"params",params}} path:"/api/v1/grid"]];
-            }
-            NSStackView* spin=nil;if(generator=="cube"||generator=="vector_cube"||generator=="sphere_gimbal"){spin=[self stack:NSUserInterfaceLayoutOrientationVertical];spin.identifier=text("spin-"+generator);spin.hidden=![NSUserDefaults.standardUserDefaults boolForKey:text("vj-native-spin-"+generator)];}
             auto parameters=effect["parameters"];auto performance=effect.value("performanceParameters",Json::array());
             auto order=[&](const Json& p){auto i=std::find(performance.begin(),performance.end(),p["name"]);return i==performance.end()?int(performance.size()):int(i-performance.begin());};
             std::stable_sort(parameters.begin(),parameters.end(),[&](const Json& a,const Json& b){return order(a)<order(b);});
@@ -577,9 +709,8 @@ static BOOL checkHitTargets(NSView* root) {
             for(int i=0;i<int(slots.count);++i)if(i>=int(performance.size())){auto empty=[self label:text(std::to_string(i+1)+" · —")];empty.font=vj::style::font(11);empty.textColor=vj::style::secondary();[slots[i] addArrangedSubview:empty];}
             for(const auto& parameter:parameters){
                 const auto key=parameter["name"].get<std::string>(),kind=parameter["kind"].get<std::string>();auto value=clip["params"].value(key,parameter["default"]);int index=order(parameter);BOOL perf=index<8&&index<int(performance.size());
-                NSStackView* container=perf?slots[index]:spin&&(key=="speed"||key.starts_with("rotate_"))?spin:_inspector;
-                if((!perf&&key.starts_with("pose_")&&(generator=="cube"||generator=="vector_cube"||generator=="sphere_gimbal"))||key=="seek_nonce"||(!perf&&generator=="video"&&(key=="position"||key=="playing")))continue;
-                if(generator=="triangulate_faces"){auto params=clip["params"];bool route=params.value("pulse_mode",std::string{})=="route";if((key=="edge_margin"&&params.value("line_ends",std::string{})=="centers")||(key=="start_face"&&params.value("pulse_start",std::string{})!="face")||(key=="pulse_end"&&!route)||(key=="end_face"&&(!route||params.value("pulse_end",std::string{})!="face")))continue;}
+                NSStackView* container=perf?slots[index]:_inspector;
+                if(key=="seek_nonce"||(!perf&&generator=="video"&&(key=="position"||key=="playing")))continue;
                 auto label=parameter.value("label",key);if(perf)label=std::to_string(index+1)+" · "+label;
                 if(kind=="media_list"){
                     auto items=value;vj::identifyMediaItems(items);
@@ -611,7 +742,7 @@ static BOOL checkHitTargets(NSView* root) {
                     }
                     continue;
                 }
-                if(kind=="choice"&&key=="font"&&(generator=="text"||generator=="laser_text")){
+                if(kind=="choice"&&key=="font"&&generator=="text"){
                     auto heading=[self label:@"Font"];heading.font=vj::style::font(11);heading.textColor=vj::style::secondary();[container addArrangedSubview:heading];auto sample=clip["params"].value("content",std::string("Aa 123"));auto newline=sample.find('\n');if(newline!=std::string::npos)sample.resize(newline);if(sample.empty())sample="Aa 123";NSStackView* pair=nil;int n=0;
                     for(const auto& font:parameter["choices"]){if(n++%2==0){pair=[self stack:NSUserInterfaceLayoutOrientationHorizontal];pair.spacing=4;pair.distribution=NSStackViewDistributionFillEqually;[container addArrangedSubview:pair];[pair.widthAnchor constraintEqualToAnchor:container.widthAnchor constant:-16].active=YES;}auto button=[[VJFontTile alloc]init];button->command={{"action","set_clip"},{"params",{{"font",font}}}};button->path="/api/v1/grid";button.target=self;button.action=@selector(perform:);button.face=text(font);button.sample=text(sample);button.title=text(font);button.buttonType=NSButtonTypePushOnPushOff;button.state=font==value?NSControlStateValueOn:NSControlStateValueOff;button.font=previewFont(font.get<std::string>());if(clip["params"].value("italic",false))button.font=[NSFontManager.sharedFontManager convertFont:button.font toHaveTrait:NSItalicFontMask];button.accessibilityLabel=text(font);[pair addArrangedSubview:button];[button.heightAnchor constraintEqualToConstant:54].active=YES;}continue;
                 }
@@ -643,7 +774,6 @@ static BOOL checkHitTargets(NSView* root) {
                 if(bindings.contains(key)){control.enabled=NO;rowView.value.enabled=NO;rowView.reset.enabled=NO;control.toolTip=@"Patch control";}
                 if(generator=="video"&&(key=="audio_enabled"||key=="audio_gain")&&clip["params"].value("loop_mode",std::string{})=="ping-pong"){control.enabled=NO;rowView.value.enabled=NO;}
             }
-            if(spin){auto toggle=[NSButton checkboxWithTitle:@"Auto rotation" target:self action:@selector(toggleSpin:)];toggle.identifier=text(generator);toggle.state=spin.hidden?NSControlStateValueOff:NSControlStateValueOn;[_inspector addArrangedSubview:toggle];[toggle.widthAnchor constraintEqualToAnchor:_inspector.widthAnchor constant:-16].active=YES;[_inspector addArrangedSubview:spin];[spin.widthAnchor constraintEqualToAnchor:_inspector.widthAnchor constant:-16].active=YES;}
         }
 
 
@@ -652,9 +782,10 @@ static BOOL checkHitTargets(NSView* root) {
     vj::style::apply(_inspector);bindInspector(_inspector,context);[_inspector layoutSubtreeIfNeeded];[inspectorScroll.contentView scrollToPoint:scrollOrigin];[inspectorScroll reflectScrolledClipView:inspectorScroll.contentView];
 }
 - (void)toggleLibrary:(NSButton*)sender {(void)sender;_libraryPanel.collapsed=!_libraryPanel.collapsed;if(!_checking)[NSUserDefaults.standardUserDefaults setBool:_libraryPanel.collapsed forKey:@"vj-native-library-collapsed"];[self refresh];}
-- (void)leds:(id)sender {[self selectNavigation:@"LEDs"];[self controls:sender];[_controlsView selectPage:3];}
-- (void)dmx:(id)sender {[self selectNavigation:@"DMX"];[self controls:sender];[_controlsView selectPage:2];}
-- (void)mix:(id)sender {[self selectNavigation:@"Mix"];[self controls:sender];[_controlsView selectPage:0];}
+- (void)lights:(id)sender {[self selectNavigation:@"Lights"];[self controls:sender];[_controlsView showLights];}
+- (void)leds:(id)sender {[self selectNavigation:@"Lights"];[self controls:sender];[_controlsView selectPage:3];}
+- (void)dmx:(id)sender {[self selectNavigation:@"Lights"];[self controls:sender];[_controlsView selectPage:2];}
+- (void)mix:(id)sender {[self selectNavigation:@"Mixer"];[self controls:sender];[_controlsView selectPage:0];}
 - (void)settings:(id)sender {[self selectNavigation:@"Settings"];[self controls:sender];[_controlsView selectPage:1];}
 - (void)refreshPlayhead:(const Json&)snapshot {
  if(!_seek||_editing||_composerBody.hidden)return;auto telemetry=_model->playbackRuntime();std::string source;const auto& outs=snapshot["outputs"];auto out=[self bus];if(out=="program")out="out1";if(outs.contains(out))for(const auto* bank:{"A","B"})for(const auto& layer:outs[out]["banks"][bank]["layers"])if(layer.value("grid_row",std::string{})==_row&&layer.value("grid_column",std::string{})==_column&&source.empty())source=layer.value("source_id",std::string{});
@@ -662,7 +793,6 @@ static BOOL checkHitTargets(NSView* root) {
  for(const auto& item:telemetry["sources"])if(item.value("sourceId",std::string{})==source&&!source.empty()){double duration=item.value("durationSeconds",0.),position=item.value("playheadSeconds",0.);if(duration>0){_seek.doubleValue=item.value("loopPosition",0.);_playhead.stringValue=[NSString stringWithFormat:@"%d:%05.2f / %d:%05.2f",int(position/60),fmod(position,60),int(duration/60),fmod(duration,60)];}auto error=item.value("error",std::string{});if(!error.empty())_playhead.stringValue=text(error);return;}_playhead.stringValue=_seekMediaItem.empty()?@"— / —":@"Not on active output";
 }
 - (void)toggleInspector:(NSButton*)sender {(void)sender;_clipPanel.collapsed=!_clipPanel.collapsed;if(!_checking)[NSUserDefaults.standardUserDefaults setBool:_clipPanel.collapsed forKey:@"vj-native-inspector-collapsed"];[self refresh];}
-- (void)toggleSpin:(NSButton*)sender {auto wanted=[@"spin-" stringByAppendingString:sender.identifier];for(NSView* view in _inspector.arrangedSubviews)if([view.identifier isEqualToString:wanted])view.hidden=sender.state!=NSControlStateValueOn;[NSUserDefaults.standardUserDefaults setBool:sender.state==NSControlStateValueOn forKey:[@"vj-native-spin-" stringByAppendingString:sender.identifier]];}
 - (void)updateInspectorValues {
     const auto& grid=_snapshot["state"]["grid"];Json row,clip,column;for(const auto& item:grid["rows"])if(item["id"]==_row){row=item;if(item["clips"].contains(_column))clip=item["clips"][_column];}for(const auto& item:grid["columns"])if(item["id"]==_column)column=item;
     std::function<void(NSView*)> update=[&](NSView* view){
@@ -685,20 +815,38 @@ static BOOL checkHitTargets(NSView* root) {
     Json target={{"kind","param"},{"bus",[self bus]},{"slot",std::max(0,selected)},{"param",parameter}};auto midi=_snapshot["state"].value("midi",Json::object());bool learning=midi.value("learning",Json())==target,mapped=false;for(const auto& m:midi.value("mappings",Json::array()))if(m.value("type",std::string{})=="cc"&&m.value("bus",std::string{})==[self bus]&&m.value("slot",-1)==selected&&m.value("param",std::string{})==parameter)mapped=true;
     auto button=[self command:learning?@"Cancel":mapped?@"MIDI ✓":@"MIDI" body:{{"action","midi_learn"},{"target",learning?Json():target}} path:"/api/v1/midi"];button.controlSize=NSControlSizeMini;button.font=vj::style::font(10);button.enabled=selected>=0;button.toolTip=selected<0?@"Set a clip in A to map this layer":learning?@"Cancel MIDI learn":@"Learn MIDI control";return button;
 }
-- (void)poseChanged:(VJPoseControl*)sender {auto b=binding(sender);if(!b)return;Json params={{"pose_x",sender->angles[0]},{"pose_y",sender->angles[1]},{"pose_z",sender->angles[2]}};if(b->parameter.value("effect",std::string{})!="sphere_gimbal")params["speed"]=0;bool tracking=_editing;_editing=true;[self submitInspector:{{"action","set_clip"},{"params",params}} sender:sender];_editing=tracking;_inspectorDirty=true;}
 - (void)duplicateClip:(NSControl*)sender {
     auto b=binding(sender);if(!b)return;auto current=_model->presentationSnapshot();auto grid=current["state"]["grid"],context=b->context;if(!followInspectorClip(grid,context)){_status.hidden=NO;_status.stringValue=@"Set changed";return;}Json row;for(const auto& item:grid["rows"])if(item["id"]==context["row"])row=item;if(row.is_null())return;auto source=context["column"].get<std::string>();if(!row["clips"].contains(source)||row["clips"][source]["id"]!=context.value("clipId",Json())){_status.hidden=NO;_status.stringValue=@"Clip changed";return;}std::string column;for(const auto& item:grid["columns"])if(!row["clips"].contains(item["id"].get<std::string>())){column=item["id"];break;}
     if(column.empty()){auto created=_model->request("POST","/api/v1/grid",{{"action","add_column"},{"active_show",context["active_show"]},{"bus",context["bus"]},{"revision",current["revision"]}});if(created.status>=300){_status.hidden=NO;_status.stringValue=text(created.body.value("error",std::string("Column failed")));return;}column=created.body["result"]["id"];current=_model->presentationSnapshot();}
     auto copied=_model->request("POST","/api/v1/grid",{{"action","copy_clip"},{"active_show",context["active_show"]},{"bus",context["bus"]},{"row",context["row"]},{"source_column",source},{"column",column},{"revision",current["revision"]}});if(copied.status>=300){_status.hidden=NO;_status.stringValue=text(copied.body.value("error",std::string("Copy failed")));return;}
     [self submit:{{"action","select_cell"},{"active_show",context["active_show"]},{"bus",context["bus"]},{"row",context["row"]},{"column",column},{"revision",copied.body["revision"]}} path:"/api/v1/grid" method:"POST"];
 }
-- (void)resetMold:(NSControl*)sender {[self submitInspector:{{"action","set_clip"},{"params",{{"seed",arc4random_uniform(1000000)}}}} sender:sender];}
 - (BOOL)submitInspector:(Json)body sender:(NSControl*)sender {
     auto b=binding(sender);if(!b){_status.hidden=NO;_status.stringValue=@"Control unavailable";return NO;}auto current=_model->presentationSnapshot();const auto& grid=current["state"]["grid"];auto context=b->context;
-    auto action=body.value("action",std::string{});bool clipAction=action=="set_clip"||action=="delete_clip"||action=="video_transport"||action=="toggle_clip"||action=="launch_clip"||action=="put_clip";
+    auto action=body.value("action",std::string{});bool clipAction=action=="make_independent"||action=="set_clip"||action=="delete_clip"||action=="video_transport"||action=="toggle_clip"||action=="launch_clip"||action=="put_clip";
     bool valid=grid["active_show"]==context["active_show"];if(valid&&clipAction){valid=followInspectorClip(grid,context);if(valid){body["row"]=context["row"];body["column"]=context["column"];}}
     if(!valid){_status.hidden=NO;_status.stringValue=@"Clip changed";_inspectorDirty=true;return NO;}
     for(auto key:{"active_show","bus","row","column"})if(!body.contains(key))body[key]=context[key];if(!body.contains("revision"))body["revision"]=current["revision"];[self submit:body path:"/api/v1/grid" method:"POST"];return YES;
+}
+- (vj::Reply)placeLibrarySubpatch:(const Json&)body {
+    if(_closing||!_window)return {503,{{"error","Compose is unavailable"}}};
+    auto stage=[&](const vj::LibraryOutputRequest& request)->vj::Reply {
+        if(![self ensurePatch])return {503,{{"error",_patchError.localizedDescription.UTF8String?:"Patch unavailable"}}};
+        NSError* error=nil;NSDictionary* placed;
+        if(request.duplicate)placed=[_patch duplicatePublishedOutput:text(request.inputSource) error:&error];
+        else if(!request.inputSource.empty())placed=[_patch instantiateLibrarySubpatch:text(request.templateID) outputID:text(request.outputID) inputSource:text(request.inputSource) error:&error];
+        else placed=[_patch instantiateLibrarySubpatch:text(request.templateID) outputID:text(request.outputID) error:&error];
+        if(!placed)return {400,{{"error",error.localizedDescription.UTF8String?:"Subpatch placement failed"}}};
+        auto data=[NSJSONSerialization dataWithJSONObject:placed options:0 error:nil];
+        return {200,Json::parse(std::string((const char*)data.bytes,data.length))};
+    };
+    auto finish=[&](const std::string& instance,bool commit)->vj::Reply {
+        if(commit){[_patch commitLibrarySubpatch:text(instance)];[self refreshPatchOutputs];return {200};}
+        NSError* error=nil;
+        if(![_patch discardLibrarySubpatch:text(instance) error:&error])return {409,{{"error",error.localizedDescription.UTF8String?:"Could not remove subpatch"}}};
+        return {200};
+    };
+    return vj::placeLibrarySubpatch(*_model,body,stage,finish);
 }
 - (void)submit:(Json)body path:(std::string)path method:(std::string)method {
     if(!body.contains("revision"))body["revision"]=_revision;
@@ -905,7 +1053,7 @@ static BOOL checkHitTargets(NSView* root) {
     _revision=UINT64_MAX;[self refresh];[_window.contentView layoutSubtreeIfNeeded];[_workspaceSplit adjustSubviews];[_workspaceSplit setPosition:_workspaceSplit.bounds.size.height*_splitFraction ofDividerAtIndex:0];
     if(!_checking)[NSUserDefaults.standardUserDefaults setObject:@"Compose + patch" forKey:@"VJWorkspacePage"];
     [_patch setEditorVisible:YES];[_patch frameGraph];[_patch setEditorFocused:NO];[_window makeFirstResponder:_canvas];
-    for(NSView* view in _nav.arrangedSubviews)if([view.identifier isEqual:@"tab-patch"])((NSButton*)view).state=NSControlStateValueOn;
+    for(NSView* view in _nav.arrangedSubviews)if([view.identifier isEqual:@"tab-Patch"])((NSButton*)view).state=NSControlStateValueOn;
 }
 - (CGFloat)splitView:(NSSplitView*)split constrainMinCoordinate:(CGFloat)proposed ofSubviewAt:(NSInteger)index {(void)split;(void)proposed;(void)index;return 320;}
 - (CGFloat)splitView:(NSSplitView*)split constrainMaxCoordinate:(CGFloat)proposed ofSubviewAt:(NSInteger)index {(void)proposed;(void)index;return MAX(320,split.bounds.size.height-240);}
@@ -917,14 +1065,19 @@ static BOOL checkHitTargets(NSView* root) {
     auto port=getenv("VJ_PATCH_API_PORT")?atoi(getenv("VJ_PATCH_API_PORT")):9418;
     NSError* error=nil;_patch=[[PatchEditorController alloc]initWithWindow:_window sessionURL:[NSURL fileURLWithPath:session] apiPort:port error:&error];_patchError=error;
     if(!_patch){NSLog(@"Patch: %@",_patchError);return NO;}
+    [_preview setProcessorController:_patch];
     auto view=_patch.view;view.translatesAutoresizingMaskIntoConstraints=NO;[_patchContainer addSubview:view];
     [NSLayoutConstraint activateConstraints:@[[view.leadingAnchor constraintEqualToAnchor:_patchContainer.leadingAnchor],[view.trailingAnchor constraintEqualToAnchor:_patchContainer.trailingAnchor],[view.topAnchor constraintEqualToAnchor:_patchContainer.topAnchor],[view.bottomAnchor constraintEqualToAnchor:_patchContainer.bottomAnchor]]];
     return YES;
 }
+- (void)openClipPatch:(NSButton*)sender {
+    [self patch:nil];
+    [_patch focusPublishedOutput:sender.identifier];
+}
 - (void)patch:(id)sender {
     (void)sender;if(_patchActive&&!_splitMode)return;
     if(![self ensurePatch]){auto alert=[NSAlert alertWithError:_patchError];[alert beginSheetModalForWindow:_window completionHandler:nil];return;}
-    [_clipSearch cancel];[self selectNavigation:@"patch"];_patchActive=YES;_controls=false;_mapping=false;
+    [_clipSearch cancel];[self selectNavigation:@"Patch"];_patchActive=YES;_controls=false;_mapping=false;
     _controlsView.hidden=YES;_mapperView.hidden=YES;_composerBody.hidden=YES;_monitors.hidden=YES;_toolbar.hidden=YES;_status.hidden=YES;_patchContainer.hidden=NO;
     _window.minSize=NSMakeSize(1100,690);auto frame=_window.frame;if(frame.size.width<1100||frame.size.height<690){frame.size.width=MAX(1100,frame.size.width);frame.size.height=MAX(690,frame.size.height);[_window setFrame:frame display:YES];}
     [_window.contentView layoutSubtreeIfNeeded];[_workspaceSplit adjustSubviews];[_patch setEditorActive:YES];
@@ -952,7 +1105,7 @@ static BOOL checkHitTargets(NSView* root) {
         if(getenv("VJ_PATCH_SESSION")){
             auto spin=[&](double seconds){auto end=[NSDate dateWithTimeIntervalSinceNow:seconds];while(end.timeIntervalSinceNow>0)[[NSRunLoop mainRunLoop]runUntilDate:[NSDate dateWithTimeIntervalSinceNow:.01]];};
             NSButton* tab=nil;for(NSView* view in _nav.arrangedSubviews)if([view.identifier isEqual:@"tab-patch"])tab=(NSButton*)view;
-            check(@"White Patch tab after Settings",tab&&[tab.title isEqual:@"patch"]&&[tab.contentTintColor isEqual:NSColor.whiteColor]&&[_nav.arrangedSubviews indexOfObject:tab]==7);
+            check(@"White Patch tab after Settings",tab&&[tab.title isEqual:@"Patch"]&&[tab.contentTintColor isEqual:NSColor.whiteColor]&&[_nav.arrangedSubviews indexOfObject:tab]==7);
             [tab performClick:nil];spin(1);
             check(@"Patch editor embedded in VJ",_patch&&_patch.active&&_patch.view.window==_window&&!_patchContainer.hidden&&_composerBody.hidden);
             NSLog(@"Workspace %@ pane %@ editor %@ root %@",NSStringFromRect(_workspaceSplit.frame),NSStringFromRect(_patchContainer.frame),NSStringFromRect(_patch.view.frame),NSStringFromRect(_root.frame));
@@ -1161,3 +1314,23 @@ static BOOL checkHitTargets(NSView* root) {
 }
 
 @end
+
+vj::Reply VJPlaceLibrarySubpatch(const vj::Json& command){
+    // HTTP workers can arrive during teardown. Cancel unstarted main-thread work on timeout.
+    struct Placement {std::atomic<bool> claimed{false};vj::Reply reply;};
+    auto state=std::make_shared<Placement>();auto done=dispatch_semaphore_create(0);
+    auto body=command;
+    auto place=^{
+        if(state->claimed.exchange(true))return;
+        auto app=(VJApplication*)NSApp.delegate;
+        state->reply=app?[app placeLibrarySubpatch:body]:vj::Reply(503,{{"error","Compose is unavailable"}});
+        dispatch_semaphore_signal(done);
+    };
+    if(NSThread.isMainThread){place();return state->reply;}
+    dispatch_async(dispatch_get_main_queue(),place);
+    if(dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,3*NSEC_PER_SEC))){
+        if(!state->claimed.exchange(true))return {503,{{"error","Compose is busy"}}};
+        dispatch_semaphore_wait(done,DISPATCH_TIME_FOREVER);
+    }
+    return state->reply;
+}

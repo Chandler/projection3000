@@ -1,0 +1,6 @@
+#pragma once
+
+#define EDITOR_FONT_CAPTION 10.0
+#define EDITOR_FONT_ITEM 11.0
+#define EDITOR_FONT_BODY 12.0
+#define EDITOR_FONT_TITLE 13.0

@@ -1,0 +1,95 @@
+{
+  "version": 2,
+  "component": {
+    "id": "24E6490B-3264-525B-9DD5-5DB2D4056BD0",
+    "name": "Snake",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "A687C7A2-AD40-5A90-9ACA-B2333E6CE75C"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "3222B5D8-53AF-576D-814E-6F69B4E4B0DF",
+          "node": "A687C7A2-AD40-5A90-9ACA-B2333E6CE75C",
+          "name": "Trace",
+          "key": "Trace",
+          "output": true,
+          "type": "trace"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "918C2103-DA6A-567A-B4E9-601C8797A4DD",
+          "name": "Speed",
+          "node": "A687C7A2-AD40-5A90-9ACA-B2333E6CE75C",
+          "key": "speed"
+        },
+        {
+          "id": "41D8722E-F984-5532-A8D7-CCD67ED9F242",
+          "name": "Beat sync",
+          "node": "A687C7A2-AD40-5A90-9ACA-B2333E6CE75C",
+          "key": "beat_sync"
+        },
+        {
+          "id": "9CE3C323-4FD9-5D11-8494-E8FE37241EF1",
+          "name": "Laps/beat",
+          "node": "A687C7A2-AD40-5A90-9ACA-B2333E6CE75C",
+          "key": "beat_speed"
+        },
+        {
+          "id": "7337EEE0-7191-5874-AB41-13479DC1ACCB",
+          "name": "Tail length",
+          "node": "A687C7A2-AD40-5A90-9ACA-B2333E6CE75C",
+          "key": "tail"
+        },
+        {
+          "id": "F8DCB2E0-B5EC-5E80-9705-CE9806AB5C6D",
+          "name": "Drag trail",
+          "node": "A687C7A2-AD40-5A90-9ACA-B2333E6CE75C",
+          "key": "drag"
+        },
+        {
+          "id": "FDCA41AF-7804-5CCA-B94B-0147386765AC",
+          "name": "Color",
+          "node": "A687C7A2-AD40-5A90-9ACA-B2333E6CE75C",
+          "key": "tint"
+        },
+        {
+          "id": "3419E7D2-6508-5BF4-A817-4A45213BCFB1",
+          "name": "Rainbow",
+          "node": "A687C7A2-AD40-5A90-9ACA-B2333E6CE75C",
+          "key": "rainbow"
+        }
+      ],
+      "preview": "A687C7A2-AD40-5A90-9ACA-B2333E6CE75C"
+    }
+  },
+  "nodes": [
+    {
+      "id": "A687C7A2-AD40-5A90-9ACA-B2333E6CE75C",
+      "kind": "traceSnake",
+      "name": "Snake",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "speed": 0.5,
+        "beat_sync": 0,
+        "beat_speed": 0.25,
+        "tail": 0.25,
+        "drag": 0.5,
+        "tint": 16723592,
+        "rainbow": 0.0
+      },
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

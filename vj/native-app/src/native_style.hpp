@@ -1,5 +1,6 @@
 #pragma once
 #import <AppKit/AppKit.h>
+#include "EditorTypography.h"
 void VJInstallControlStyle();
 // Shared controls own presentation and interaction, never application state.
 @interface VJPopup : NSPopUpButton
@@ -50,9 +51,9 @@ inline NSColor* secondary(){return hex(0xa7adb2);} inline NSColor* disabled(){re
 inline NSColor* accent(){return hex(0x8fc6db);} inline NSColor* engaged(){return hex(0x344a52);}
 inline NSColor* overlay(){return hex(0xc084fc);} inline NSColor* warning(){return hex(0xdfb86f);}
 inline NSColor* danger(){return hex(0xe59186);} inline NSColor* live(){return hex(0x9bc88a);}
-inline NSFont* font(CGFloat size=12){return [NSFont systemFontOfSize:size];}
-inline NSFont* headingFont(){return [NSFont systemFontOfSize:12 weight:NSFontWeightSemibold];}
-inline NSFont* valueFont(){return [NSFont monospacedDigitSystemFontOfSize:11 weight:NSFontWeightRegular];}
+inline NSFont* font(CGFloat size=EDITOR_FONT_BODY){return [NSFont systemFontOfSize:size];}
+inline NSFont* headingFont(){return [NSFont systemFontOfSize:EDITOR_FONT_BODY weight:NSFontWeightSemibold];}
+inline NSFont* valueFont(){return [NSFont monospacedDigitSystemFontOfSize:EDITOR_FONT_ITEM weight:NSFontWeightRegular];}
 NSStackView* stack(NSUserInterfaceLayoutOrientation orientation);
 NSTextField* label(NSString* text,BOOL secondary=NO);
 NSButton* button(NSString* title,id target,SEL action);

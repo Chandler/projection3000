@@ -16,6 +16,15 @@ struct SubpatchInspector: View {
                 Text("Automatic").tag(nil as UUID?)
                 ForEach(members) { node in Text(node.name).tag(Optional(node.id)) }
             }
+            let videoInputs = interface.ports.filter { !$0.output && $0.type == .video }
+            if !videoInputs.isEmpty {
+                Picker("Clip input",selection:Binding(get:{ interface.processingInput },set:{ id in
+                    edit("Change Clip Input") { $0.processingInput = id }
+                })) {
+                    Text("None").tag(nil as UUID?)
+                    ForEach(videoInputs) { Text($0.name).tag(Optional($0.id)) }
+                }
+            }
             ForEach([false,true],id:\.self) { output in
                 DisclosureGroup(output ? "Outputs":"Inputs") {
                     ForEach(interface.ports.filter { $0.output == output }) { port in
@@ -38,7 +47,7 @@ struct SubpatchInspector: View {
                                     }
                                 }
                             } label: { Image(systemName:"cable.connector") }
-                            Button { edit("Hide Port") { $0.ports.removeAll { $0.id == port.id } } } label: { Image(systemName:"minus") }
+                            Button { edit("Hide Port") { if $0.processingInput == port.id { $0.processingInput = nil }; $0.ports.removeAll { $0.id == port.id } } } label: { Image(systemName:"minus") }
                         }
                     }
                     Menu("Expose Port") {
@@ -63,17 +72,8 @@ struct SubpatchInspector: View {
                             }))
                             Button { edit("Hide Control") { $0.parameters.removeAll { $0.id == address.id } } } label: { Image(systemName:"minus") }
                         }
-                        let value = Binding<Double>(get:{ node.value(spec.key) },set:{ workspace.parameter(node.id,spec.key,$0) })
-                        if let choices = spec.choices {
-                            Picker(address.name,selection:value) {
-                                ForEach(choices.indices,id:\.self) { i in Text(choices[i]).tag(spec.min+Double(i)) }
-                            }.labelsHidden()
-                        } else {
-                            ParameterControl(value:value,in:spec.min...spec.max,step:spec.step,centeredBalance:node.kind.isAudioNode && ["balance","pan"].contains(spec.key),spec:spec,onEditingChanged:{ active in
-                                if active { workspace.beginGesture() } else { workspace.endGesture("Change "+address.name) }
-                            })
-                        }
-                    }.midiParameter(workspace:workspace,id:node.id,key:spec.key)
+                        NodeAppParameter(workspace:workspace,id:node.id,key:spec.key,title:address.name)
+                    }
                 }
             }
             Menu("Expose Control") {
@@ -85,6 +85,7 @@ struct SubpatchInspector: View {
                     }
                 }
             }
+            Button("Save to Library…") { workspace.saveSubpatchToLibrary(group.id) }
             Toggle("Activate devices and outputs in new instance",isOn:$enableOutputs).toggleStyle(.checkbox)
             HStack {
                 Button("New Instance") {
@@ -94,5 +95,42 @@ struct SubpatchInspector: View {
                 Button("Export…") { workspace.exportSubpatch(group.id) }
             }
         }
+    }
+}
+
+extension Workspace {
+    func saveSubpatchToLibrary(_ id: UUID) {
+        do {
+            guard let component = graph.component(id) else { throw GraphError("Unknown subpatch") }
+            let dialog = NSAlert()
+            dialog.messageText = "Save Subpatch to Library"
+            let name = NSTextField(frame:NSRect(x:0,y:0,width:300,height:24))
+            name.stringValue = component.name.replacingOccurrences(of:"/",with:"–")
+            name.setAccessibilityLabel("Library name")
+            dialog.accessoryView = name
+            dialog.addButton(withTitle:"Save")
+            dialog.addButton(withTitle:"Cancel")
+            dialog.window.initialFirstResponder = name
+            guard dialog.runModal() == .alertFirstButtonReturn else { return }
+            let value = name.stringValue.trimmingCharacters(in:.whitespacesAndNewlines)
+            guard !value.isEmpty else { throw GraphError("Enter a library name") }
+            let key = value.hasSuffix(".subpatch.json") ? value : value+".subpatch.json"
+            let url = PatchLibrary.subpatchDirectory.appendingPathComponent(key)
+            let replace = FileManager.default.fileExists(atPath:url.path)
+            if replace {
+                let confirm = NSAlert()
+                confirm.messageText = "Replace "+url.lastPathComponent+"?"
+                confirm.addButton(withTitle:"Cancel")
+                confirm.addButton(withTitle:"Replace")
+                guard confirm.runModal() == .alertSecondButtonReturn else { return }
+            }
+            var copy = graph
+            guard let index = copy.components?.firstIndex(where:{ $0.id == id }) else { throw GraphError("Unknown subpatch") }
+            let title = String(url.lastPathComponent.dropLast(".subpatch.json".count))
+            guard !title.isEmpty else { throw GraphError("Enter a library name") }
+            copy.components?[index].name = title
+            try PatchLibrary.save(copy.subpatchTemplate(id),id:key,replace:replace)
+            message = "Saved to Library · "+value
+        } catch { message = error.localizedDescription }
     }
 }

@@ -1,5 +1,4 @@
 #include "collection_rendering.hpp"
-#include "collection_effect_catalog.hpp"
 #include "../../native-renderer/src/surface_curvature_json.hpp"
 #include <boost/uuid/detail/sha1.hpp>
 #include <algorithm>
@@ -209,11 +208,6 @@ J particleFaceChart(const J& face,const J& rect,double aspect,double metricAspec
  auto map=[&](double u,double v){double q=(*h)[6]*u+(*h)[7]*v+(*h)[8];return P{((*h)[0]*u+(*h)[1]*v+(*h)[2])/q,((*h)[3]*u+(*h)[4]*v+(*h)[5])/q};};
  auto c=map(.5,.5),u=map(.51,.5),v=map(.5,.51);result["basis"]={{(u[0]-c[0])*100*aspect,(u[1]-c[1])*100},{(v[0]-c[0])*100*aspect,(v[1]-c[1])*100}};
  return result;
-}
-J collectionEffectCatalog(){
-    auto effects=J::parse(collection_effect_catalog_json);
-    for(auto& effect:effects)if(effect["name"]=="flash_faces")effect["parameters"].insert(effect["parameters"].begin(),J{{"name","palette_source"},{"label","Palette source"},{"kind","text"},{"default",""},{"paletteSource",true}});
-    return effects;
 }
 std::string collectionBusName(const std::string& mid,const std::string& cid){boost::uuids::detail::sha1 sha;sha.process_bytes(cid.data(),cid.size());boost::uuids::detail::sha1::digest_type digest;sha.get_digest(digest);std::ostringstream hex;hex<<std::hex<<std::setfill('0');for(auto word:digest)hex<<std::setw(2*sizeof(word))<<static_cast<std::uint32_t>(word);return "collection"+mid+"-"+hex.str().substr(0,12);}
 J collectionGeometry(const J& document){

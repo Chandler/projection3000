@@ -3,7 +3,6 @@
 #include "meta_mapping.hpp"
 #include "patch_catalog.hpp"
 #include "media_http.hpp"
-#include "effect_catalog.hpp"
 #include "mapping_model.hpp"
 #include "mapping_geometry.hpp"
 #include "mapping_compat.hpp"
@@ -15,7 +14,6 @@
 #include "output_model.hpp"
 #include "trace_model.hpp"
 #include "composition_api.hpp"
-#include "vector_catalog.hpp"
 #include "fixture_output.hpp"
 #include "room_model.hpp"
 #include "link_runtime.hpp"
@@ -37,14 +35,6 @@ namespace vj {
 namespace {
 using Error=ApiError;
 const auto processStarted=std::chrono::steady_clock::now();
-std::filesystem::path apiAssetRoot(){
-    const auto bundled=defaultVectorModuleRoot().parent_path().parent_path();if(std::filesystem::is_regular_file(bundled/"docs/external-api.md"))return bundled;
-#ifdef VJ_API_ASSET_ROOT
-    return VJ_API_ASSET_ROOT;
-#else
-    return {};
-#endif
-}
 void check(bool value,const std::string& message){if(!value)throw Error(400,message);}
 std::string id(const std::string& prefix){static std::atomic<unsigned long> counter{0};return prefix+"_"+std::to_string(getpid())+"_"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"_"+std::to_string(++counter);}
 std::string label(const Json& j,const std::string& key,const std::string& fallback){if(!j.contains(key))return fallback;check(j[key].is_string(),key+" must be text");auto s=j[key].get<std::string>();check(!s.empty()&&s.size()<=100,"Name must contain 1–100 bytes");return s;}
@@ -69,7 +59,6 @@ void reconcileGrid(Json& d){
         if(std::none_of(items.begin(),items.end(),[&](const Json& item){return item["id"]==wanted;})){if(items.empty())focus.erase(key);else focus[key]=items[0]["id"];}
     }
 }
-bool vectorEffect(const std::string& effect){for(const auto& item:vectorEffectCatalog())if(item["name"]==effect)return true;return false;}
 void validateParams(const std::string& effect,const Json& params,const Json& effects){check(params.is_object(),"params must be an object");auto found=std::find_if(effects.begin(),effects.end(),[&](const Json& j){return j["name"]==effect;});check(found!=effects.end(),"Effect not yet supported in native development app");for(auto it=params.begin();it!=params.end();++it){const auto& specs=(*found)["params"];check(specs.contains(it.key()),"Unknown parameter: "+it.key());const auto& spec=specs[it.key()];if(spec.value("mediaFile",false)||spec["type"]=="text"){check(it.value().is_string(),"Expected text");if((effect=="ndi"||effect=="syphon")&&it.key()=="source"&&it.value()!="")check(!normalizeLiveSelection(effect,it.value()).empty(),"Invalid live source selection");if(it.key()=="subtitle_track"){const auto track=it.value().get<std::string>();check(track.size()<=9&&track.find_first_not_of("0123456789")==std::string::npos,"Invalid subtitle stream index");}}
 else if(spec["type"]=="media_list"){validateMediaItems(it.value());}
 else if(spec["type"]=="color"){auto s=it.value().get<std::string>();check(s.size()==7&&s[0]=='#'&&s.find_first_not_of("0123456789abcdefABCDEF",1)==std::string::npos,"Expected #RRGGBB color");}else if(spec["type"]=="bool"){check(it.value().is_boolean(),"Expected boolean");}
@@ -78,13 +67,11 @@ else{Json one={{it.key(),it.value()}};double v=number(one,it.key(),spec["min"],s
 }
 Json Model::catalog(){
     static const Json builtin=[] {
-    auto entries=Json::parse(effect_catalog_json);
-    for(const auto& entry:vectorEffectCatalog())entries.push_back(entry);
+    Json entries=Json::array();
     for(const auto& entry:mediaEffectCatalog())entries.push_back(entry);
     for(const auto& entry:liveSourceCatalog())entries.push_back(entry);
     for(const auto& entry:patchEffectCatalog())entries.push_back(entry);
     entries.push_back(textSourceCatalog());
-    for(const auto& entry:collectionEffectCatalog())entries.push_back(entry);
     for(auto& entry:entries){entry["title"]=entry["label"];entry["params"]=Json::object();for(const auto& parameter:entry["parameters"]){auto spec=parameter;spec["type"]=spec["kind"];entry["params"][parameter["name"].get<std::string>()]=spec;}}
     return entries;
     }();
@@ -100,10 +87,8 @@ void Model::reconcileUploaded(Json& document)const{
 }
 Json Model::initial(){
     Json columns=Json::array();for(int i=0;i<6;i++)columns.push_back({{"id","column_"+std::to_string(i)},{"name",std::to_string(i+1)}});
-    Json clips=Json::object();const char* colors[]={"#edacbc","#efc39a","#eae6a4","#a2d3b3","#99c7e1","#bea4df"};
-    for(int i=0;i<6;i++)clips["column_"+std::to_string(i)]={{"id","clip_"+std::to_string(i)},{"name","Color "+std::to_string(i+1)},{"gen","solid_color"},{"params",{{"color",colors[i]}}},{"opacity",1.0}};
-    Json grid={{"version",2},{"columns",columns},{"rows",Json::array({{{"id","row_0"},{"name","Color"},{"blend","normal"},{"enabled",true},{"clips",clips}}})},
-      {"selections",{{"program",{{"row_0","column_0"}}}}},{"selections_b",{{"program",{{"row_0","column_4"}}}}},{"running",{{"program",true}}},{"crossfade",{{"program",0.0}}},
+    Json grid={{"version",2},{"columns",columns},{"rows",Json::array({{{"id","row_0"},{"name","Layer"},{"blend","normal"},{"enabled",true},{"clips",Json::object()}}})},
+      {"selections",{{"program",Json::object()}}},{"selections_b",{{"program",Json::object()}}},{"running",{{"program",true}}},{"crossfade",{{"program",0.0}}},
       {"active_show","show_0"},{"shows",Json::array({{{"id","show_0"},{"name","Set 1"}}})},{"control_focus",{{"bus","program"},{"row","row_0"},{"column","column_0"}}},{"fader_sync",false},{"controller_lights","full"}};
     Json mappings=Json::object();for(int i=1;i<=4;i++){auto mid=std::to_string(i);mappings[mid]={{"mappingId",mid},{"type","mapping_snapshot"},{"schema",2},{"revision",0},{"layout",nullptr},{"project",{{"rects",Json::array({{{"id","rect-1"},{"name","Surface 1"},{"kind","surface"},{"source","out1"},{"mode","grid"},{"corners",Json::array({{.1,.1},{.9,.1},{.9,.9},{.1,.9}})},{"uvs",Json::array({{0,1},{1,1},{1,0},{0,0}})},{"cornerRadius",0.0},{"blend","normal"},{"fit","stretch"}}})},{"traces",Json::array()},{"collections",Json::array()},{"groups",Json::array()},{"output",{{"rotation",0},{"enabled",true},{"boundsGrid",false}}}}}};}
     return {{"format","vj-native-development/1"},{"revision",0},{"outputCount",1},{"grid",grid},{"showContents",{{"show_0",content(grid)}}},{"mappings",mappings}};
@@ -256,6 +241,11 @@ void Model::refreshGridUnlocked(double snapshotTime)const{
     const auto revision=document_["revision"].get<uint64_t>(),processingRevision=media_.processingRevision();
     if(gridRevision_!=revision||gridProcessingRevision_!=processingRevision||snapshotTime-gridResolvedAt_>=1.){
     Json grid=document_["grid"];auto history=histories_.find(grid["active_show"].get<std::string>());grid["history"]={{"can_undo",history!=histories_.end()&&!history->second.undo.empty()},{"can_redo",history!=histories_.end()&&!history->second.redo.empty()}};
+    const auto catalog=effectCatalog();
+    std::set<std::string> known;
+    for(const auto& entry:catalog)known.insert(entry.at("name").get<std::string>());
+    for(auto& row:grid["rows"])for(auto& clip:row["clips"])if(!known.contains(clip.at("gen").get<std::string>()))
+        clip["nativeImportUnsupported"]=true;
     for(auto& row:grid["rows"])for(auto& clip:row["clips"]){auto effect=clip.value("gen",std::string{});if(effect=="image"||effect=="video"){auto status=media_.status(clip["params"].value("file",std::string{}),effect);clip["resolved_file"]=status.value("resolved_file",std::string{});clip["mediaStatus"]=status;if(effect=="video")media_.decorateVideo(clip);}}
     for(auto& row:grid["rows"])for(auto& clip:row["clips"])if(clip.value("gen",std::string{})=="media_collection"){
         clip["resolvedItems"]=Json::array();for(const auto& item:clip["params"].value("items",Json::array())){auto resolved=media_.status(item.value("file",std::string{}),item.value("type",std::string{}));if(item.value("type",std::string{})=="video")media_.decorateVideo(resolved);clip["resolvedItems"].push_back(std::move(resolved));}
@@ -490,7 +480,7 @@ Json Model::gridCommand(Json& d,const Json& c){
     }
     auto cid=c.at("column").get<std::string>();byId(g["columns"],cid);auto& clips=row["clips"];
     if(action=="put_clip"){
-        auto effect=c.at("effect").get<std::string>();auto params=c.value("params",Json::object());if(effect=="text"){if(!TextSource::available())throw Error(501,"Text rasterization is unavailable on this build");params=normalizeTextParams(params);}if(effect.starts_with("external_"))params=modules_.normalize(effect,params);if(vectorEffect(effect))params=normalizeVectorParams(effect,params);validateParams(effect,params,effectCatalog());
+        auto effect=c.at("effect").get<std::string>();auto params=c.value("params",Json::object());if(effect=="text"){if(!TextSource::available())throw Error(501,"Text rasterization is unavailable on this build");params=normalizeTextParams(params);}if(effect.starts_with("external_"))params=modules_.normalize(effect,params);validateParams(effect,params,effectCatalog());
         if((effect=="image"||effect=="video")&&params.contains("file")&&params["file"]!="")check(!media_.resolve(params["file"],effect).empty(),"Media file is unavailable");
         for(const auto& entry:effectCatalog())if(entry["name"]==effect)for(auto it=entry["params"].begin();it!=entry["params"].end();++it)if(!params.contains(it.key()))params[it.key()]=it.value()["default"];
         if(effect=="video"&&params.value("loop_mode",std::string{})=="ping-pong")params["audio_enabled"]=false;
@@ -528,7 +518,7 @@ Json Model::gridCommand(Json& d,const Json& c){
     }
     if(action=="launch_clip"||action=="toggle_clip"){if(action=="toggle_clip"&&selected.value(rid,std::string{})==cid)selected.erase(rid);else selected[rid]=cid;return clip;}
     if(action=="set_clip"){
-        if(c.contains("params")){auto p=clip["params"];check(c["params"].is_object(),"params must be object");p.update(c["params"]);if(clip["gen"]=="text")p=normalizeTextParams(p);if(clip["gen"].get<std::string>().starts_with("external_"))p=modules_.normalize(clip["gen"],p);if(vectorEffect(clip["gen"]))p=normalizeVectorParams(clip["gen"],p);validateParams(clip["gen"],p,effectCatalog());auto effect=clip["gen"].get<std::string>();if((effect=="image"||effect=="video")&&c["params"].contains("file")&&p["file"]!="")check(!media_.resolve(p["file"],effect).empty(),"Media file is unavailable");if(effect=="video"&&p.value("loop_mode",std::string{})=="ping-pong")p["audio_enabled"]=false;clip["params"]=p;clip.erase("nativeImportUnsupported");}
+        if(c.contains("params")){auto p=clip["params"];check(c["params"].is_object(),"params must be object");p.update(c["params"]);if(clip["gen"]=="text")p=normalizeTextParams(p);if(clip["gen"].get<std::string>().starts_with("external_"))p=modules_.normalize(clip["gen"],p);validateParams(clip["gen"],p,effectCatalog());auto effect=clip["gen"].get<std::string>();if((effect=="image"||effect=="video")&&c["params"].contains("file")&&p["file"]!="")check(!media_.resolve(p["file"],effect).empty(),"Media file is unavailable");if(effect=="video"&&p.value("loop_mode",std::string{})=="ping-pong")p["audio_enabled"]=false;clip["params"]=p;clip.erase("nativeImportUnsupported");}
         if(c.contains("patchControls")){
             auto bindings=c["patchControls"];check(bindings.is_object(),"patchControls must be an object");
             const auto effects=effectCatalog();auto spec=std::find_if(effects.begin(),effects.end(),[&](const Json& e){return e["name"]==clip["gen"];});
@@ -641,6 +631,14 @@ std::optional<Reply> Model::calibrationRequest(const std::string& method,const s
     catch(const std::exception& error){const bool conflict=path=="/api/calibrations/load"||path=="/api/calibration/projector"||path=="/api/calibration/camera/start";return Reply{conflict?409:400,{{"error",error.what()}}};}
 }
 Reply Model::request(const std::string& method,const std::string& path,const Json& body){
+    if(path=="/api/v1/grid"&&method=="POST"&&body.is_object()&&(body.contains("subpatchID")||body.value("action",Json())=="make_independent")){
+        if(!libraryRequest_)return {501,{{"error","Subpatch placement requires an embedded Patch editor"}}};
+        return libraryRequest_(method,"/v1/library/place",body);
+    }
+    if(path=="/api/v1/library/favorites"||path=="/api/v1/library/subpatches"){
+        if(!libraryRequest_)return {501,{{"error","Patch library is unavailable in this host"}}};
+        return libraryRequest_(method,path.substr(4),body);
+    }
     if(path.starts_with("/api/v1/mappings/")&&path.ends_with("/editor-visibility")){
         try{
             std::lock_guard lock(mutex_);auto p=parts(path);check(p.size()==5,"Unknown editor visibility route");const auto mid=p.at(3);check(document_["mappings"].contains(mid),"Unknown mapping");const auto& project=document_["mappings"][mid]["project"];
@@ -730,14 +728,6 @@ Reply Model::request(const std::string& method,const std::string& path,const Jso
             std::ifstream in(modules_.modulePath(id,version),std::ios::binary);if(!in)throw std::runtime_error("Module unavailable");return {200,Json(),std::string((std::istreambuf_iterator<char>(in)),{}),"application/wasm"};
         }catch(const std::exception& error){return {404,{{"error",error.what()}}};}
     }
-    if(method=="GET"&&(path.starts_with("/vector/modules/")||(path.starts_with("/api/v1/effects/")&&path.ends_with("/wasm")))){
-        static const std::map<std::string,std::string> modules={{"vector_cube","vector-cube"},{"laser_text","laser-text"},{"electric_strips","electric-strips"},{"vector_scan_lines","vector-scan-lines"},{"lorenz_attractor","lorenz-attractor"},{"slime_mold","slime-mold"}};
-        for(const auto& [effect,module]:modules)if(path=="/vector/modules/"+module+".wasm"||path=="/api/v1/effects/"+effect+"/wasm"){
-            std::ifstream in(defaultVectorModuleRoot()/(module+".wasm"),std::ios::binary);if(!in)return {404,{{"error","Bundled module unavailable"}}};
-            return {200,Json(),std::string((std::istreambuf_iterator<char>(in)),{}),"application/wasm"};
-        }
-        return {404,{{"error","Module not found"}}};
-    }
     if(method=="GET"&&(path=="/api/v1/effects"||(path.starts_with("/api/v1/effects/")&&!path.ends_with("/wasm")))){
         try{auto effects=effectCatalog();auto library=media_.catalog();for(auto& effect:effects){auto name=effect.value("name",std::string{});if(name!="image"&&name!="video")continue;Json files=Json::array();for(const auto& item:library["items"])if(item["type"]==name)files.push_back(item["file"]);for(auto& parameter:effect["parameters"])if(parameter["name"]=="file")parameter["choices"]=files;}
             if(path=="/api/v1/effects")return {200,externalEffectsResponse(effects,vectorModuleValidatorAvailable())};
@@ -765,7 +755,7 @@ Reply Model::request(const std::string& method,const std::string& path,const Jso
         }
         if(method=="GET"){
             if(path=="/api/v1/meta-mapping")return {200,snapshotUnlocked()["metaMapping"]};
-            if(path=="/api/v1"||path=="/api/v1/"||path=="/api/v1/capabilities"||path=="/api/v1/docs"||path.starts_with("/api/v1/sdk/"))return *apiCompatibilityReply(method,path,snapshotUnlocked(),effectCatalog(),apiAssetRoot());
+            if(path=="/api/v1"||path=="/api/v1/"||path=="/api/v1/capabilities"||path=="/api/v1/docs"||path.starts_with("/api/v1/sdk/"))return *apiCompatibilityReply(method,path,snapshotUnlocked(),effectCatalog(),defaultApiAssetRoot());
             auto copy=document_;if(auto room=requestRoom(copy,method,path,body))return {200,*room};if(auto link=linkRequest(copy,method,path,body,controlRuntime_.value("link",Json::object())))return {200,*link};if(auto fixture=fixtureOutputRequest(copy,method,path,body,controlRuntime_))return {200,*fixture};
             if(isOutputRoute(path)){auto copy=document_;return {200,*requestOutput(copy,method,path,body,outputRuntime_)};}
             if(path=="/api/v1/text/fonts"||path=="/api/text/fonts")return {200,textSource_.fonts()};

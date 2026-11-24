@@ -28,7 +28,7 @@ struct MediaTransportInspector: View {
                         if editing { scrubTime = position; scrubbing = true; workspace.beginGesture() }
                         else { scrubbing = false; workspace.endGesture("Scrub Media") }
                     }).disabled(duration <= 0).help("Scrub playback")
-                    HStack { Text(stamp(position)); Spacer(); Text(stamp(duration)) }.font(.system(size:10,design:.monospaced)).foregroundStyle(.secondary)
+                    HStack { Text(stamp(position)); Spacer(); Text(stamp(duration)) }.font(.editorCaption.monospacedDigit()).foregroundStyle(.secondary)
                     if !workspace.playing { Text("Global transport is paused").font(.system(size:10)).foregroundStyle(.secondary) }
                     HStack {
                         Button("Set In") { workspace.parameter(id,"start",position) }.help("Set loop start to the current playhead")

@@ -1,6 +1,5 @@
 #include "led_sampler.hpp"
 #include "control_model.hpp"
-#include "collection_effect_catalog.hpp"
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -19,17 +18,8 @@ namespace vj {
 namespace {
 using J=SceneJson;using RGB=std::array<float,3>;
 double fract(double x){return x-std::floor(x);}
-double mod(double x,double period){return x-std::floor(x/period)*period;}
-RGB color(const J& p,const char* key){auto text=p.value(key,std::string("#ffffff"));if(text.size()!=7)return {1,1,1};RGB result{};try{for(int k=0;k<3;k++)result[k]=std::stoi(text.substr(1+k*2,2),nullptr,16)/255.f;}catch(...){return {1,1,1};}return result;}
-RGB palette(double x){return {float(.5+.5*std::cos(2*M_PI*x)),float(.5+.5*std::cos(2*M_PI*(x-1./3))),float(.5+.5*std::cos(2*M_PI*(x-2./3)))};}
-J defaults(const std::string& name,const J& supplied){
-    static const J catalog=J::parse(collection_effect_catalog_json);J p=J::object();
-    for(const auto& spec:catalog)if(spec["name"]==name)for(const auto& parameter:spec["parameters"])p[parameter["name"].get<std::string>()]=parameter["default"];
-    if(supplied.is_object())p.update(supplied);return p;
-}
 std::string mediaBus(const std::string& bus,const NativeLayer& layer){return "ledmedia-"+bus+"-"+std::to_string(layer.id)+"-"+layer.source_id;}
 bool media(const NativeLayer& layer){return layer.generator=="image"||layer.generator=="video";}
-bool traceEffect(const std::string& name){return name=="trace_snake"||name=="trace_pulse"||name=="trace_rainbow"||name=="trace_solid"||name=="trace_lightning";}
 std::set<std::string> routes(const J& snapshot){std::set<std::string> result;for(const auto& fixture:snapshot.at("state").value("fixtures",J::array()))if(fixture.value("enabled",false)){auto out=fixture.value("route",J::object()).value("out",std::string("none"));if(out=="out1")out="program";if(out!="none")result.insert(out);}return result;}
 std::vector<std::pair<std::string,double>> banks(const NativeScene& scene,const std::string& name){auto it=scene.buses.find(name);if(it==scene.buses.end()||!it->second.running)return {};const auto& x=it->second.crossfade;if(x.empty())return {{name,1}};double amount=std::clamp(x.value("value",0.),0.,1.);return {{x.value("a",name+"A"),1-amount},{x.value("b",name+"B"),amount}};}
 std::uint32_t instanceSeed(const std::string& text){
@@ -45,68 +35,8 @@ std::uint32_t instanceSeed(const std::string& text){
     }return hash[0]%65521;
 }
 }
-// Prepare frame-wide pulse data once per strip/layer, not once per LED.
-struct LightningFrame {
- struct Pulse {double position,direction,gain;};std::vector<Pulse> pulses;
- double start,end,span,width,tail,crackle,forks,spray,brightness,rainbow,time,identity;
- bool reverse,single;RGB glow,core;
- LightningFrame(const J& p,unsigned instance,double t):time(t),identity(instance%65521){
-  auto n=[&](const char* k,double fallback=0.){return p.value(k,fallback);};
-  start=std::min(n("start"),n("end",1));end=std::max(n("start"),n("end",1));span=end-start;
-  width=std::max(.002,n("length"));tail=n("tail");crackle=n("crackle");forks=n("forks");spray=n("top_spray");brightness=n("brightness");rainbow=n("rainbow");
-  reverse=p.value("origin",std::string("start"))=="end";single=p.value("single_color",false);glow=color(p,"glow");core=single?glow:color(p,"core");
-  const bool reflect=p.value("reflect",false);const double rate=n("rate"),speed=std::max(.001,n("speed")),jitter=n("jitter"),burst=n("burst");
-  if(span<1e-6||(rate<=0&&!reflect)){span=0;return;}
-  const double elapsed=t-n("_motion_time"),distance=n("_motion_distance")+elapsed*n("speed"),jitterDistance=n("_motion_jitter_distance")+elapsed*n("speed")*jitter;
-  const double lifetime=(span+width*(1+tail*4+.88))/(speed*std::max(.05,1-jitter*.5));
-  const int count=reflect?1:std::min(1024,int(std::ceil(lifetime*rate))+1);const double latest=std::floor(t*rate);
-  pulses.reserve(count);
-  for(int i=0;i<count;i++){const double packet=latest-i;if(packet<0)break;double seed=mod(packet*37+identity*17,1009)/1009,pos,direction=1;
-   if(reflect){double travel=(distance+jitterDistance*(mod(identity*17,1009)/1009-.5))/span,phase=mod(travel,2);pos=span*(phase<1?phase:2-phase);direction=phase<1?1:-1;seed=mod(std::floor(travel)*37+identity*17,1009)/1009;}
-   else pos=(t-packet/rate)*speed*(1+jitter*(seed-.5));
-   pulses.push_back({pos,direction,1+burst*seed});
-  }
- }
- RGB sample(double x)const{
-  RGB result{};if(span<1e-6||x<start||x>end)return result;x=reverse?end-x:x-start;
-  const double noise=mod(std::floor(x*120)*37+std::floor(time*30)*17+identity*13,101)/101;
-  auto rgb=glow;if(!single&&rainbow!=0){auto hue=palette(x+time*.09);for(int k=0;k<3;k++)rgb[k]=rgb[k]*(1-rainbow)+hue[k]*rainbow;}
-  const double sprayLevel=spray*std::exp(-x*35)*noise*.25,crackleLevel=1-crackle*.9*(1-noise),wave=std::sin(x*250+time*70+identity*.37),forkLevel=forks*wave*wave*.3;
-  for(int k=0;k<3;k++)result[k]=rgb[k]*sprayLevel;
-  for(const auto& pulse:pulses){const double d=(x-pulse.position)*pulse.direction,z=d/(width*.22),head=std::exp(-.5*z*z),body=d<=0?std::clamp(1+d/(width*(1+tail*4)),0.,1.):0;
-   const double flow=(head*.55+body*.75)*crackleLevel+head*forkLevel;
-   for(int k=0;k<3;k++)result[k]+=(rgb[k]*flow+core[k]*head)*pulse.gain;
-  }
-  for(auto& c:result)c=std::clamp(c*brightness,0.,1.);return result;
- }
-};
-static std::array<float,3> evaluateNormalizedTrace(const std::string& name,double x,double t,double beat,const SceneJson& p,unsigned instance){
-    auto n=[&](const char* key,double fallback=0.){return p.value(key,fallback);};auto b=[&](const char* key){return p.value(key,false);};
-    const double env=std::exp(-3*fract(beat));RGB result{};
-    if(name=="trace_rainbow"){result=palette(x*n("spread")+beat*n("speed")*.25);for(auto& c:result)c*=n("brightness")*(1-n("pulse")*(1-env));return result;}
-    if(name=="trace_solid"){result=color(p,"tint");for(auto& c:result)c*=1-n("breathe")*.6*(1-env);return result;}
-    const double elapsed=t-n("_motion_time"),distance=n("_motion_distance")+elapsed*n("speed"),jitterDistance=n("_motion_jitter_distance")+elapsed*n("speed")*n("jitter"),ratePhase=n("_motion_rate_phase")+elapsed*n("rate");
-    if(name=="trace_pulse"){
-        const double phase=fract(b("beat_sync")?beat*n("per_beat"):ratePhase),on=n("on_time",.5),scale=on/std::max(1.,n("attack")+n("release")),attack=n("attack")*scale,release=n("release")*scale;
-        double a=phase>=on?0:std::min({1.,attack>0?phase/attack:1.,release>0?(on-phase)/release:1.});a=std::pow(a*a*(3-2*a),n("curve",1));result=color(p,"tint");for(auto& c:result)c*=n("floor")+(1-n("floor"))*a;return result;
-    }
-    if(name=="trace_snake"){
-        const double phase=b("beat_sync")?beat*n("beat_speed"):t*n("speed"),d=fract(phase-x),body=std::max(std::clamp(1-d/n("tail",.25),0.,1.),n("drag")*std::exp(-d/std::max(.005,n("tail")*(.2+n("drag")))));result=color(p,"tint");auto rainbow=palette(x+t*.04);for(int k=0;k<3;k++)result[k]=(result[k]*(1-n("rainbow"))+rainbow[k]*n("rainbow"))*body;return result;
-    }
-    if(name!="trace_lightning")return result;
-    return LightningFrame(p,instance,t).sample(x);
-}
-std::array<float,3> evaluateTrace(const std::string& name,double x,double seconds,double beat,const SceneJson& params,unsigned instance){return evaluateNormalizedTrace(name,x,seconds,beat,defaults(name,params),instance);}
 struct LedSampler::Impl {
-    struct Motion {double anchor=0,last=0;std::array<double,3> velocity{},phase{};bool initialized=false;};
-    NativeScene scene;std::chrono::steady_clock::time_point received=std::chrono::steady_clock::now();
-    std::map<std::string,Motion> motions,projectedMotions;J status=J::object();
-    J parameters(const std::string& key,const NativeLayer& layer,double seconds,bool projected=false){
-        auto p=defaults(layer.generator,layer.params);auto& m=(projected?projectedMotions:motions)[key];std::array<double,3> velocity={p.value("speed",0.),p.value("speed",0.)*p.value("jitter",0.),p.value("rate",0.)};
-        if(!m.initialized||seconds<m.last-1){m=Motion{};m.initialized=true;m.velocity=velocity;}m.last=seconds;
-        if(velocity!=m.velocity){for(int k=0;k<3;k++)m.phase[k]+=(seconds-m.anchor)*m.velocity[k];m.anchor=seconds;m.velocity=velocity;}
-        p.update({{"_motion_time",m.anchor},{"_motion_distance",m.phase[0]},{"_motion_jitter_distance",m.phase[1]},{"_motion_rate_phase",m.phase[2]}});return p;
-    }
+    NativeScene scene;std::chrono::steady_clock::time_point received=std::chrono::steady_clock::now();J status=J::object();
 };
 LedSampler::LedSampler():impl_(std::make_unique<Impl>()){}LedSampler::~LedSampler()=default;
 void LedSampler::prepareScene(const SceneJson& snapshot,NativeScene& scene,std::map<std::string,std::array<int,2>>& sizes){
@@ -118,16 +48,7 @@ void LedSampler::prepareScene(const SceneJson& snapshot,NativeScene& scene,std::
         }
     }
 }
-void LedSampler::configure(const NativeScene& scene){impl_->scene=scene;impl_->received=std::chrono::steady_clock::now();std::set<std::string> active;for(const auto& [busName,bus]:scene.buses)for(const auto& layer:bus.layers)if(traceEffect(layer.generator))active.insert(busName+"\n"+layer.source_id);for(auto it=impl_->motions.begin();it!=impl_->motions.end();)if(!active.contains(it->first))it=impl_->motions.erase(it);else ++it;}
-void LedSampler::configure(NativeScene& scene){
-    std::set<std::string> active;
-    for(auto& [name,bus]:scene.buses)for(auto& layer:bus.layers)if(traceEffect(layer.generator)){
-        const auto key=layer.source_id+"\n"+layer.generator;active.insert(key);
-        layer.params=impl_->parameters(key,layer,bus.clock.seconds,true);
-    }
-    for(auto it=impl_->projectedMotions.begin();it!=impl_->projectedMotions.end();)if(!active.contains(it->first))it=impl_->projectedMotions.erase(it);else ++it;
-    configure(static_cast<const NativeScene&>(scene));
-}
+void LedSampler::configure(const NativeScene& scene){impl_->scene=scene;impl_->received=std::chrono::steady_clock::now();}
 LedSampler::Frames LedSampler::render(const SceneJson& snapshot,NativeRenderGraph& graph,double flash){
     Frames frames;auto& scene=impl_->scene;const auto& state=snapshot.at("state");const auto mix=state.value("mix",J::object()),sync=mix.value("sync",J::object()),clock=state.value("clock",J::object());
 #ifdef VJ_PATCH_COLLECTION
@@ -150,20 +71,18 @@ LedSampler::Frames LedSampler::render(const SceneJson& snapshot,NativeRenderGrap
         if(fixture.value("enabled",false))for(const auto& [busName,amount]:banks(scene,out)){
             if(amount<=0||!scene.buses.contains(busName))continue;const auto& bus=scene.buses.at(busName);std::vector<RGB> composed(count,RGB{});
             const double shiftedElapsed=bus.clock.playing?elapsed+ledShift-videoShift:0.;const double seconds=std::max(0.,bus.clock.seconds+shiftedElapsed),beat=std::max(0.,bus.clock.beat+shiftedElapsed*bus.clock.bpm/60.);
-            for(const auto& layer:bus.layers){if(!layer.enabled||layer.opacity<=0||(!traceEffect(layer.generator)&&layer.generator!="patch_trace"&&!media(layer)))continue;
+            for(const auto& layer:bus.layers){if(!layer.enabled||layer.opacity<=0||(layer.generator!="patch_trace"&&!media(layer)))continue;
                 const auto key=mediaBus(busName,layer);if(media(layer)&&!mediaColors.contains(key))continue;
-                const auto params=traceEffect(layer.generator)?impl_->parameters(busName+"\n"+layer.source_id,layer,seconds):J::object();const auto seed=instanceSeed(id);
+                const auto seed=instanceSeed(id);
 #ifdef VJ_PATCH_COLLECTION
                 J traceRecipe=J::object();if(layer.generator=="patch_trace")for(const auto& output:graph.patch_outputs())if(output.value("type",std::string{})=="trace"&&output.value("id",std::string{})==layer.params.value("source",std::string{})&&output.value("available",false))traceRecipe=output.value("recipe",J::object());
                 patch_trace::Recipe patchTrace(traceRecipe);
 #endif
-                std::optional<LightningFrame> lightning;
-                if(layer.generator=="trace_lightning")lightning.emplace(params,seed,seconds);
                 for(int i=0;i<count;i++){
                     double t=double(route.value("reverse",false)?count-1-i:i)/(count-1),x=route.value("start",0.)+(route.value("end",1.)-route.value("start",0.))*t,offset=route.value("offset",0.);if(offset!=0)x=fract(x+offset);
-                    auto src=lightning?lightning->sample(x):media(layer)?mediaColors.at(key):layer.generator=="patch_trace"?RGB{}:evaluateNormalizedTrace(layer.generator,x,seconds,beat,params,seed);
+                    auto src=media(layer)?mediaColors.at(key):RGB{};
 #ifdef VJ_PATCH_COLLECTION
-                    if(layer.generator=="patch_trace")src=patchTrace.sample(x,seed);
+                    if(layer.generator=="patch_trace")src=patchTrace.sample(x,seed,beat);
 #endif
                     for(int k=0;k<3;k++){double dst=composed[i][k],value=src[k];if(layer.blend=="add")value=dst+value;else if(layer.blend=="subtract")value=dst-value;else if(layer.blend=="multiply")value=dst*value;else if(layer.blend=="screen")value=1-(1-dst)*(1-value);composed[i][k]=std::clamp(dst+(value-dst)*layer.opacity,0.,1.);}
                 }

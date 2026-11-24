@@ -16,7 +16,7 @@ struct VoltageTrailInspector: View {
             VStack(alignment:.leading,spacing:10) {
                 Text("Connect XY together, or wire X and Y separately. Separate inputs take precedence for that axis; an unconnected axis is zero. Timing offset is retained.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("TRAIL DURATION").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+                Text("TRAIL DURATION").font(.editorHeading).foregroundStyle(.secondary)
                 Picker("Timing",selection:Binding(get:{ node.value("historyMS")>0 ? 0:1 },set:{ mode in
                     let scope=renderer.voltageScope(id)
                     let rate=scope?.rate ?? node.value("rate")
@@ -65,7 +65,7 @@ struct VoltageTrailInspector: View {
                     let seconds=scope?.seconds ?? AnalogVectorStyle.trailSeconds(node,rate:rate)
                     let history=renderer.audioGraph.oscilloscopeSamples(scope?.source,seconds:seconds)
                     Text(String(format:"%.2f ms · %d samples · %.0f kHz",seconds*1000,history.points.count,history.rate/1000))
-                        .font(.caption.monospaced()).foregroundStyle(.secondary)
+                        .font(.editorValue).foregroundStyle(.secondary)
                     Text(String(format:"%.3f draw cycles at %.3f Hz%@",seconds*rate,rate,scope?.linked == true ? " · linked":" · unlinked"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -95,7 +95,7 @@ struct HardwareAudioInspector: View {
                     ForEach(1...64,id:\.self) { Text(String($0)).tag($0) }
                 }.midiParameter(workspace:workspace,id:id,key:p.key)
             }
-            TimelineView(.periodic(from:.now,by:0.5)) { _ in Text(renderer.status[id] ?? "Waiting for audio").font(.caption.monospaced()).foregroundStyle(.secondary) }
+            TimelineView(.periodic(from:.now,by:0.5)) { _ in Text(renderer.status[id] ?? "Waiting for audio").font(.editorValue).foregroundStyle(.secondary) }
         }
     }
 }

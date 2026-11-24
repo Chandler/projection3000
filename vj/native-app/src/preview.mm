@@ -1,3 +1,5 @@
+#import "PatchKit.h"
+#import <Metal/Metal.h>
 #import "preview.hpp"
 #include "native_render_graph.hpp"
 #include "render_scene.hpp"
@@ -33,6 +35,7 @@
     dispatch_queue_t queue;
     std::mutex renderMutex;
     std::unique_ptr<NativeRenderGraph> graph;
+    NativeProcessorEncoder processorEncoder;
     std::unique_ptr<vj::MappedOutputs> outputs;
     std::unique_ptr<vj::VectorHost> vectors;
     std::unique_ptr<vj::FixtureOutputRuntime> fixtures;
@@ -138,7 +141,7 @@ VJPreviewRuntime* runtimeForModel(vj::Model* model,NSOpenGLPixelFormat* format){
                 const auto frameStarted=std::chrono::steady_clock::now();
                 auto stageStarted=frameStarted;std::array<double,7> stages{};
                 auto finishStage=[&](size_t index){auto at=std::chrono::steady_clock::now();stages[index]=std::chrono::duration<double,std::milli>(at-stageStarted).count();stageStarted=at;};
-                if(!self->graph){self->graph=std::make_unique<NativeRenderGraph>();self->vectors=std::make_unique<vj::VectorHost>(vj::defaultVectorModuleRoot(),self->model->stateRoot()/"vector-modules");self->vectors->install(*self->graph);}
+                if(!self->graph){self->graph=std::make_unique<NativeRenderGraph>();self->graph->set_processor_encoder(self->processorEncoder);self->vectors=std::make_unique<vj::VectorHost>(self->model->stateRoot()/"vector-modules");self->vectors->install(*self->graph);}
                 if(!self->publisher){self->publisher=std::make_unique<vj::FramePublisher>();self->model->frames().setEncoder(vj::encodeFrameImage);}
                 if(!self->outputs)self->outputs=std::make_unique<vj::MappedOutputs>();
                 if(!self->leds)self->leds=std::make_unique<vj::LedSampler>();
@@ -255,6 +258,24 @@ VJPreviewRuntime* runtimeForModel(vj::Model* model,NSOpenGLPixelFormat* format){
         [_runtime addView:self];
     }
     return self;
+}
+- (void)setProcessorController:(PatchEditorController*)controller {
+    __weak PatchEditorController* weak=controller;auto runtime=_runtime;
+    dispatch_async(runtime->queue,^{
+        runtime->processorEncoder=[weak](const NativeProcessorFrame& frame,std::string& error) {
+            PatchEditorController* editor=weak;
+            if(!editor){error="Patch processor host is unavailable";return false;}
+            NSError* failure=nil;
+            BOOL ok=[editor encodeProcessor:@(frame.source.c_str())
+                                      input:(__bridge id<MTLTexture>)frame.inputTexture
+                                     output:(__bridge id<MTLTexture>)frame.outputTexture
+                              commandBuffer:(__bridge id<MTLCommandBuffer>)frame.commandBuffer
+                                       time:frame.seconds context:@(frame.destination.c_str()) error:&failure];
+            if(!ok)error=failure.localizedDescription.UTF8String?:"Patch processor could not encode the frame";
+            return bool(ok);
+        };
+        if(runtime->graph)runtime->graph->set_processor_encoder(runtime->processorEncoder);
+    });
 }
 - (void)setPhysicalOutput:(BOOL)physical {_physical=physical;}
 - (void)setIgnoreOutputRotation:(BOOL)ignore {

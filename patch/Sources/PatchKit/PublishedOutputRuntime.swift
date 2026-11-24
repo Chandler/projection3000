@@ -12,6 +12,7 @@ final class PublishedOutputRuntime {
     let videoCollectionPipeline: MTLComputePipelineState
     let cloudParticlePipeline: MTLComputePipelineState
     let cloudPipeline: MTLComputePipelineState
+    let surfacePreview: MappedSurfacePreview
     let traceRuntime: TraceRuntime
     var ports: [PublishedPort] = []
     var retained = Set<String>()
@@ -24,6 +25,7 @@ final class PublishedOutputRuntime {
     var recipes: [UUID:[String:Any]] = [:]
     init(device: MTLDevice,library: MTLLibrary) throws {
         self.device=device
+        surfacePreview=MappedSurfacePreview(device:device)
         traceRuntime=try TraceRuntime(device:device,library:library)
         pipeline=try device.makeComputePipelineState(function:library.makeFunction(name:"collectionPreview")!)
         particlePipeline=try device.makeComputePipelineState(function:library.makeFunction(name:"graphParticlePreview")!)
@@ -54,7 +56,7 @@ final class PublishedOutputRuntime {
     func plan(_ graph: Graph,publicationGraph: Graph) {
         ports=publicationGraph.publishablePorts
         let ids=Set(graph.nodes.map(\.id))
-        traceRuntime.retain(ids)
+        surfacePreview.retain(ids);traceRuntime.retain(ids)
         previews=previews.filter { ids.contains($0.key) }
         recipes=recipes.filter { ids.contains($0.key) }
     }
@@ -252,7 +254,7 @@ final class PublishedOutputRuntime {
                 item["available"]=node.enabled && !recipe.isEmpty && ((recipe["paletteConnected"] as? Bool) != true || !(recipe["colors"] as? [[String:Double]] ?? []).isEmpty)
             case .collection:
                 item["recipe"]=recipes[port.nodeID] ?? [:]
-                item["available"]=node.enabled && (node.kind == .videoCollection ? !(recipes[port.nodeID]?["videos"] as? [String] ?? []).isEmpty : (node.kind == .layerMux || node.kind == .ab) ? recipes[port.nodeID] != nil : node.kind == .surfaceGate ? recipes[port.nodeID]?["videoSource"] != nil : !(recipes[port.nodeID]?["colors"] as? [[String:Double]] ?? []).isEmpty)
+                item["available"]=node.enabled && (node.kind.isMappedSurface ? recipes[node.id] != nil : node.kind == .videoCollection ? !(recipes[port.nodeID]?["videos"] as? [String] ?? []).isEmpty : (node.kind == .layerMux || node.kind == .ab) ? recipes[port.nodeID] != nil : node.kind == .surfaceGate ? recipes[port.nodeID]?["videoSource"] != nil : !(recipes[port.nodeID]?["colors"] as? [[String:Double]] ?? []).isEmpty)
             default: break
             }
             result.append(item)

@@ -1,0 +1,84 @@
+{
+  "version": 2,
+  "component": {
+    "id": "1ED148FA-5819-5D6B-988C-6469BE58D6AC",
+    "name": "Dither",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "8372F123-6BF8-5A2B-B508-8CD1E259184A"
+    ],
+    "interface": {
+      "processingInput": "D6FAE145-1742-5F8C-A4BA-CEAE15E676BF",
+      "preview": "8372F123-6BF8-5A2B-B508-8CD1E259184A",
+      "ports": [
+        {
+          "id": "D6FAE145-1742-5F8C-A4BA-CEAE15E676BF",
+          "node": "8372F123-6BF8-5A2B-B508-8CD1E259184A",
+          "name": "Video",
+          "key": "Video",
+          "type": "video",
+          "output": false
+        },
+        {
+          "id": "49ABBA60-0D93-5AC9-81BE-41B9701C5DA8",
+          "node": "8372F123-6BF8-5A2B-B508-8CD1E259184A",
+          "name": "Video",
+          "key": "Video",
+          "type": "video",
+          "output": true
+        }
+      ],
+      "parameters": [
+        {
+          "id": "E2C2F513-E79F-571E-9454-9E24A9AEDF49",
+          "name": "Algorithm",
+          "node": "8372F123-6BF8-5A2B-B508-8CD1E259184A",
+          "key": "algorithm"
+        },
+        {
+          "id": "5C5656C1-8169-5837-A279-6A4330DAED98",
+          "name": "Pixel Size",
+          "node": "8372F123-6BF8-5A2B-B508-8CD1E259184A",
+          "key": "cell"
+        },
+        {
+          "id": "46E71BAA-5156-5317-A0BC-E37FC4D08543",
+          "name": "Levels",
+          "node": "8372F123-6BF8-5A2B-B508-8CD1E259184A",
+          "key": "levels"
+        },
+        {
+          "id": "154C3C6B-8775-5E62-ABB5-9DB3DE112920",
+          "name": "Tonal Mapping",
+          "node": "8372F123-6BF8-5A2B-B508-8CD1E259184A",
+          "key": "tonal"
+        },
+        {
+          "id": "3A42317B-1DD3-5E87-9941-73273CD20026",
+          "name": "Contrast",
+          "node": "8372F123-6BF8-5A2B-B508-8CD1E259184A",
+          "key": "contrast"
+        }
+      ]
+    },
+    "collapsed": true
+  },
+  "nodes": [
+    {
+      "id": "8372F123-6BF8-5A2B-B508-8CD1E259184A",
+      "kind": "dither",
+      "name": "Dither",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

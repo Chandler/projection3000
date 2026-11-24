@@ -1,0 +1,83 @@
+{
+  "version": 2,
+  "component": {
+    "id": "2100C89C-1DA6-530F-B08F-B54EDE7A0490",
+    "name": "Graph Particles",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "84F6CCD9-FED7-5466-BFF3-A358C2CCAD81"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "141C857C-B57C-5316-975F-F7E8BA5AA70E",
+          "node": "84F6CCD9-FED7-5466-BFF3-A358C2CCAD81",
+          "name": "Palette",
+          "key": "Palette",
+          "output": false,
+          "type": "palette"
+        },
+        {
+          "id": "1E804477-8706-5C7A-8B96-4D200E18DB9B",
+          "node": "84F6CCD9-FED7-5466-BFF3-A358C2CCAD81",
+          "name": "Collection",
+          "key": "Collection",
+          "output": true,
+          "type": "collection"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "26DDB30D-7D4E-5CF8-8735-B45F97A88C31",
+          "name": "Particles",
+          "node": "84F6CCD9-FED7-5466-BFF3-A358C2CCAD81",
+          "key": "particles"
+        },
+        {
+          "id": "3FCFB7B4-C738-583F-9D13-6BA06AC0A6B3",
+          "name": "Travel Duration",
+          "node": "84F6CCD9-FED7-5466-BFF3-A358C2CCAD81",
+          "key": "travel"
+        },
+        {
+          "id": "67F643E4-6D2D-558A-AE2D-783428FA0F2B",
+          "name": "Orbit Radius",
+          "node": "84F6CCD9-FED7-5466-BFF3-A358C2CCAD81",
+          "key": "orbit"
+        },
+        {
+          "id": "96159293-7433-51B7-B424-A631F9535CB8",
+          "name": "Size",
+          "node": "84F6CCD9-FED7-5466-BFF3-A358C2CCAD81",
+          "key": "size"
+        },
+        {
+          "id": "C432C8AA-9999-5E9B-8442-57E3889A8B61",
+          "name": "Speed",
+          "node": "84F6CCD9-FED7-5466-BFF3-A358C2CCAD81",
+          "key": "speed"
+        }
+      ],
+      "preview": "84F6CCD9-FED7-5466-BFF3-A358C2CCAD81"
+    }
+  },
+  "nodes": [
+    {
+      "id": "84F6CCD9-FED7-5466-BFF3-A358C2CCAD81",
+      "kind": "graphParticles",
+      "name": "Graph Particles",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

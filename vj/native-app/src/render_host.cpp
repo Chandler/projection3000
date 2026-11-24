@@ -59,8 +59,9 @@ struct RenderHost::Impl {
         if(SDL_GL_MakeCurrent(window,context)!=0)throw std::runtime_error(std::string("OpenGL current context: ")+SDL_GetError());
         SDL_GL_SetSwapInterval(0);
         graph=std::make_unique<NativeRenderGraph>();
+        graph->set_processor_encoder(options.processorEncoder);
         publisher=std::make_unique<FramePublisher>();model.frames().setEncoder(encodeFrameImage);
-        vectors=std::make_unique<VectorHost>(defaultVectorModuleRoot(),model.stateRoot()/"vector-modules");vectors->install(*graph);
+        vectors=std::make_unique<VectorHost>(model.stateRoot()/"vector-modules");vectors->install(*graph);
         outputs=std::make_unique<MappedOutputs>();
         if(options.publishOutputs){fixtures=std::make_unique<FixtureOutputRuntime>(FixtureOutputCallbacks{[this]{return model.fixtureSnapshot();},[this](const std::string& kind,const Json& status){model.setControlRuntime(kind,status);}});fixtures->start();}
     }

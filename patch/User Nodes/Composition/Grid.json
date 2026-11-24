@@ -1,0 +1,55 @@
+{
+  "name": "Grid",
+  "kind": "fieldShader",
+  "file": "Grid.metal",
+  "parameters": [
+    {
+      "key": "columns",
+      "title": "Columns",
+      "min": 1,
+      "max": 100,
+      "initial": 16,
+      "step": 1
+    },
+    {
+      "key": "rows",
+      "title": "Rows",
+      "min": 1,
+      "max": 100,
+      "initial": 9,
+      "step": 1
+    },
+    {
+      "key": "weight",
+      "title": "Line Width",
+      "min": 0.001,
+      "max": 0.5,
+      "initial": 0.045
+    },
+    {
+      "key": "tint",
+      "title": "Color",
+      "min": 0,
+      "max": 16777215,
+      "initial": 4319180,
+      "step": 1,
+      "unit": "sRGB24",
+      "midi": false
+    },
+    {
+      "key": "background",
+      "title": "Background",
+      "min": 0,
+      "max": 1,
+      "initial": 0.015
+    },
+    {
+      "key": "speed",
+      "title": "Speed",
+      "min": -4,
+      "max": 4,
+      "initial": 0,
+      "scalesFieldTime": true
+    }
+  ]
+}

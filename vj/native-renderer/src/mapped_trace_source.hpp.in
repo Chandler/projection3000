@@ -1,0 +1,37 @@
+#pragma once
+// CMake embeds Patch's trace evaluator verbatim. Fixtures use the double-precision
+// CPU instantiation and Metal uses the same equations at fragment precision.
+inline constexpr char mappedTraceSource[]=R"MSL(
+using PatchTraceReal=float;
+using PatchTraceSeed=uint;
+#define PATCH_TRACE_ADDRESS constant
+#define PATCH_TRACE_MATH(...) __VA_ARGS__
+@PATCH_TRACE_MATH@
+#undef PATCH_TRACE_MATH
+#undef PATCH_TRACE_ADDRESS
+struct TraceUniforms {
+    PatchTraceConfig lightning;
+    PatchLineTrace line;
+    int kind,mode,reverse,sequence,colors;
+    uint seed;
+    float width,offset,time,beat;
+};
+fragment float4 mappedTrace(MappedVertexOut in [[stage_in]],constant TraceUniforms& u [[buffer(0)]],
+                             constant PatchTraceColor* palette [[buffer(1)]],constant MappedBlend& blend [[buffer(2)]]) {
+    float2 p=saturate(in.uv.xy/in.uv.z);
+    float along=p.x,alpha=1;
+    if(u.mode==0){
+        float4 edges=float4(p.y,1-p.x,1-p.y,p.x);
+        float edge=min(min(edges.x,edges.y),min(edges.z,edges.w));
+        along=(edge==edges.x?p.x:edge==edges.y?1+p.y:edge==edges.z?3-p.x:4-p.y)*.25f;
+        float feather=max(fwidth(edge),.000001f);
+        alpha=1-smoothstep(max(0.f,u.width-feather),u.width+feather,edge);
+    }else if(u.mode==2)along=p.y;
+    if(u.sequence)along=(in.graph.x/in.uv.z+along)/max(1.f,in.graph.y/in.uv.z);
+    if(u.reverse)along=1-along;
+    if(u.offset!=0)along=fract(along+u.offset);
+    uint identity=(u.seed+(u.sequence?0:uint(max(0.f,round(in.graph.z/in.uv.z)))))%65521;
+    PatchTraceColor color=u.kind==4?patch_trace_sample(u.lightning,palette,u.colors,along,u.time,identity):patch_line_sample(u.line,along,u.time,u.beat);
+    return mappedColor(float4(color.r,color.g,color.b,alpha),blend);
+}
+)MSL";

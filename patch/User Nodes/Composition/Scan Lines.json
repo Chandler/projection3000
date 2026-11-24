@@ -1,0 +1,64 @@
+{
+  "name": "Scan Lines",
+  "kind": "fieldShader",
+  "file": "Scan Lines.metal",
+  "parameters": [
+    {
+      "key": "tint",
+      "title": "Color",
+      "min": 0,
+      "max": 16777215,
+      "initial": 3528959,
+      "unit": "sRGB24",
+      "step": 1,
+      "midi": false
+    },
+    {
+      "key": "rate",
+      "title": "Rate",
+      "min": -800,
+      "max": 800,
+      "initial": 110,
+      "unit": "px/s"
+    },
+    {
+      "key": "angle",
+      "title": "Angle",
+      "min": -180,
+      "max": 180,
+      "initial": 0,
+      "unit": "°"
+    },
+    {
+      "key": "spacing",
+      "title": "Spacing",
+      "min": 8,
+      "max": 600,
+      "initial": 110,
+      "unit": "px"
+    },
+    {
+      "key": "width",
+      "title": "Width",
+      "min": 1,
+      "max": 240,
+      "initial": 10,
+      "unit": "px"
+    },
+    {
+      "key": "blur",
+      "title": "Edge Blur",
+      "min": 0,
+      "max": 160,
+      "initial": 12,
+      "unit": "px"
+    },
+    {
+      "key": "amount",
+      "title": "Brightness",
+      "min": 0,
+      "max": 2,
+      "initial": 0.85
+    }
+  ]
+}

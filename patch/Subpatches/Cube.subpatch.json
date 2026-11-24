@@ -1,0 +1,138 @@
+{
+  "version": 2,
+  "component": {
+    "id": "352D8680-46A8-54B1-98E0-AAB427F78A8A",
+    "name": "Cube",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "CAB66608-9985-5038-A2F5-7CFC1E96B379",
+      "DC5E9B6C-2580-5B52-A016-34E47AC45BD4"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "B6B7A00F-AF51-537B-AE4B-9FB20F62C2DF",
+          "node": "DC5E9B6C-2580-5B52-A016-34E47AC45BD4",
+          "name": "Video",
+          "key": "Video",
+          "output": true,
+          "type": "video"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "E13356A2-47E8-5FF2-9FFC-1B0AB28D57FB",
+          "name": "Scale",
+          "node": "CAB66608-9985-5038-A2F5-7CFC1E96B379",
+          "key": "scale"
+        },
+        {
+          "id": "F2DD88E6-DDCE-5C9D-A731-4F5ED085CF22",
+          "name": "Tilt",
+          "node": "CAB66608-9985-5038-A2F5-7CFC1E96B379",
+          "key": "tilt"
+        },
+        {
+          "id": "D7E79844-31F8-5B8A-8475-A08A436BDE43",
+          "name": "Edge Width",
+          "node": "CAB66608-9985-5038-A2F5-7CFC1E96B379",
+          "key": "edge"
+        },
+        {
+          "id": "9626BC64-248C-5EE5-A1BB-2EBA2C383378",
+          "name": "Color",
+          "node": "CAB66608-9985-5038-A2F5-7CFC1E96B379",
+          "key": "tint"
+        },
+        {
+          "id": "97CBD3B6-ED27-557A-AA12-322B5B0DAC68",
+          "name": "Speed",
+          "node": "CAB66608-9985-5038-A2F5-7CFC1E96B379",
+          "key": "speed"
+        }
+      ],
+      "preview": "DC5E9B6C-2580-5B52-A016-34E47AC45BD4"
+    }
+  },
+  "nodes": [
+    {
+      "id": "CAB66608-9985-5038-A2F5-7CFC1E96B379",
+      "kind": "fieldShader",
+      "name": "Cube",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true,
+      "file": "bundle:User Nodes/Composition/Cube.metal",
+      "fieldParameters": [
+        {
+          "key": "scale",
+          "title": "Scale",
+          "min": 0.1,
+          "max": 2,
+          "initial": 0.98
+        },
+        {
+          "key": "tilt",
+          "title": "Tilt",
+          "min": -90,
+          "max": 90,
+          "initial": 23,
+          "unit": "°"
+        },
+        {
+          "key": "edge",
+          "title": "Edge Width",
+          "min": 0.001,
+          "max": 0.18,
+          "initial": 0.035
+        },
+        {
+          "key": "tint",
+          "title": "Color",
+          "min": 0,
+          "max": 16777215,
+          "initial": 6000127,
+          "step": 1,
+          "unit": "sRGB24",
+          "midi": false
+        },
+        {
+          "key": "speed",
+          "title": "Speed",
+          "min": -4,
+          "max": 4,
+          "initial": 0.4,
+          "scalesFieldTime": true
+        }
+      ]
+    },
+    {
+      "id": "DC5E9B6C-2580-5B52-A016-34E47AC45BD4",
+      "kind": "fieldRender",
+      "name": "Render Field",
+      "position": {
+        "x": 275,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [
+    {
+      "id": "2C87D54B-5CD6-53F8-AAE2-C3C06FF485F6",
+      "source": "CAB66608-9985-5038-A2F5-7CFC1E96B379",
+      "target": "DC5E9B6C-2580-5B52-A016-34E47AC45BD4",
+      "outputID": "Field",
+      "inputID": "Field"
+    }
+  ],
+  "midiMappings": []
+}

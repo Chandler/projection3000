@@ -22,11 +22,23 @@ To build a separate tree, send one ordinary graph transaction with fresh node ID
 {"op":"connect","source":"MIX_UUID","outputID":"Field","target":"RENDER_UUID","inputID":"Field"}
 ```
 
+## Source discovery and placement
+
+`GET /v1/sources` lists discovered cameras, NDI and Syphon sources alongside published Patch outputs. Each item includes its stable `id`, display `name`, `type`, `group` and `available` flag. For an item with `action: "source_add"`, send its ID with a graph command:
+
+```json
+{"op":"source_add","sourceID":"ndi:STUDIO (Camera A)","x":120,"y":160}
+```
+
+The command returns the new node UUID and accepts an optional caller-supplied `id` for graph transactions. It places a disconnected node bound to the selected device or stream. Published sockets within the current graph have `action: "select"` and a `nodeID`. Published video from the other local Patch application can be received over Syphon when its stream is available. Other remote outputs retain their declared types and have no placement action.
+
 ## Fields
 
 A Field is RGB sampled in normalized XY coordinates. Field Mix accepts two fields and a mix parameter. Its floating-point RGB surface retains values above one at the project resolution. Render Field produces a video frame at the project canvas dimensions. LED Matrix samples fields on its display grid. Cellular Automata exposes `gridColumns` and `gridRows`. At zero, automatic sizing uses the first directly connected LED Matrix in document order or a 320-column canvas-aspect grid. Each consumer samples the same simulation.
 
 Install a custom field through `POST /v1/effects` with `kind: "fieldShader"`, a name, Metal source, and an optional ordered `parameters` array. Each declaration has a unique `key`, `title`, `min`, `max`, and `initial`; optional fields include `choices`, `step`, `midi`, and `unit`. The node instance saves its declaration. A standalone `add` command can supply `kind: "fieldShader"`, `file`, and `fieldParameters` directly. With a `catalogID`, Patch takes the declaration from that catalog entry.
+
+Shader Effects may declare the same ordered numeric controls with `kind: "shaderEffect"`. Define `PATCH_EFFECT_RGBA(uv,time,input,controls)` to return an RGBA pixel. The input is a sampled 2D Metal texture. The first fifteen scalar lanes of the four `float4` controls follow declaration order, and the final lane holds shader time in seconds. An optional `scalesFieldTime:true` parameter scales that clock. Implement blending in the RGBA function if the effect exposes a mix control. A custom declaration and a built-in control style are mutually exclusive.
 
 The Metal entry point is `float3 animation(float2 uv, float time, float4 a, float4 b, float4 c, float4 d)`. Up to fifteen declared values occupy the four vectors in order, starting at `a.x`. The final lane `d.w` carries the field time in seconds. By default this is transport time. A single parameter can declare `scalesFieldTime: true` to multiply transport time before delivery to both `time` and `d.w`.
 
@@ -527,3 +539,15 @@ Use `subpatch_extract` with `nodes` (an array of member UUIDs) or `id` (an exist
 Instances open detached by default. Patch pauses copied output nodes, microphones, cameras, hardware audio and MIDI inputs, NDI inputs, and live streams. Copied publications start hidden and MUX hardware following starts off. Set `enableOutputs:true` to retain their saved states. An APC40 node reserves its device even when paused, so importing one requires this option. The template and original graph retain all saved settings.
 
 On the canvas, extract a selection or convert an existing component. The inspector provides public port names and destinations, exposed controls, preview selection, **New Instance**, and JSON export. **Insert Subpatch…** imports that JSON into another composition.
+
+### Shared library
+
+Patch and Compose share favorites in `~/Projection3000/Library/Favorites.json`. Read `GET /v1/library/favorites`. Pin or remove an entry with `POST /v1/library/favorites` and a body such as `{"kind":"patchNode","id":"noise","name":"Noise","pinned":true}`. Use `pinned:false` to remove. The response contains the current ordered `favorites` array. Identity uses both `kind` and `id`, so renaming a favorite keeps its position. Kinds are `patchNode`, `subpatch`, `composeEffect`, `media`, `source` and `patchOutput`. Shader presets use `patchNode` with a `shader:` prefix and path relative to User Nodes. Shared source entries keep their device or stream selection when offline.
+
+`GET /v1/library/subpatches` lists bundled and personal templates with stable file IDs and named input/output UUIDs. Personal files in `~/Projection3000/Patch/Subpatches` take precedence at the same relative path. Each supported Compose output includes `composeType`. The `diagnostics` array identifies unreadable templates. Save a component with `POST /v1/library/subpatches` and `{"id":"component-uuid","libraryID":"Scenes/Night.subpatch.json"}`. Set `replace:true` to overwrite a personal file.
+
+Use `subpatch_instance` with `libraryID` to load a template into the current graph. To consume one output, include its public UUID as `outputID`. The result includes `id` (instance), `source` (native host source ID), `type`, `name` and `controls`. Each control carries the public parameter UUID, instance-local member/key, numeric limits and current value. Set its value with the existing `parameter` command using instance `id` and the public UUID as `key`. The selected source is unlisted and a host can retain it on demand. Other ports, devices and MIDI mappings follow the normal detached insertion defaults.
+
+To copy an existing instance from its output, send `subpatch_instance` with `source` set to the host source ID. The copy receives a new source ID and the same exposed outlet, current control settings and internal wiring. An output must belong to an exposed subpatch port to support this operation.
+
+A processor declares its video input by public UUID in `processingInput`. Supply a Patch video source ID in `inputSource` and select a video `outputID` to insert the processor and wire that inlet in one graph transaction. When making an independent copy of an existing processor through `source`, the copy shares the original upstream connection. Detached instances in the Patch editor can be wired manually. Catalog entries expose their canonical `favorite` identity, including shared Patch node identities for bundled single-node processors.

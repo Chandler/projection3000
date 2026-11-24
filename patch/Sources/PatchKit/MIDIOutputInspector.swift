@@ -23,7 +23,7 @@ struct MIDIOutputInspector: View {
             Button("All Notes Off") { renderer.midiGraph.panic(id) }
                 .help("Release notes and sustain now. Pause Arpeggiator or MIDI Out to stop the repeating pattern.")
             TimelineView(.periodic(from:.now,by:0.1)) { _ in
-                Text(renderer.midiGraph.status[id] ?? "Waiting for MIDI").font(.caption.monospaced()).foregroundStyle(.secondary)
+                Text(renderer.midiGraph.status[id] ?? "Waiting for MIDI").font(.editorValue).foregroundStyle(.secondary)
             }
         }
     }
@@ -35,10 +35,10 @@ struct ArpeggiatorInspector: View {
     var body: some View {
         if let node=workspace.graph.node(id) {
             Text("Patch tempo · one note at a time · MIDI note events").font(.caption).foregroundStyle(.secondary)
-            Text(ArpeggiatorStyle.notes(node).map(ArpeggiatorStyle.noteName).joined(separator:"  ")).font(.caption.monospaced()).foregroundStyle(.secondary)
+            Text(ArpeggiatorStyle.notes(node).map(ArpeggiatorStyle.noteName).joined(separator:"  ")).font(.editorValue).foregroundStyle(.secondary)
             Button(node.enabled ? "Stop arpeggiator":"Start arpeggiator") { workspace.update(id) { $0.enabled.toggle() } }
             TimelineView(.periodic(from:.now,by:0.1)) { _ in
-                Text(renderer.midiGraph.status[id] ?? "Connect MIDI Out").font(.caption.monospaced()).foregroundStyle(.secondary)
+                Text(renderer.midiGraph.status[id] ?? "Connect MIDI Out").font(.editorValue).foregroundStyle(.secondary)
             }
         }
     }
@@ -74,7 +74,7 @@ struct MIDIMonitorInspector: View {
                 ForEach(Array(events.suffix(8).enumerated()),id:\.offset) { _,event in
                     Text(event["message"] as? String ?? "").textSelection(.enabled)
                 }
-            }.font(.caption.monospaced())
+            }.font(.editorValue)
         }
     }
 }

@@ -1,0 +1,122 @@
+{
+  "version": 2,
+  "component": {
+    "id": "F7DC5D67-5AD4-592F-A590-1C7EAE8E8570",
+    "name": "Starfield",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "3E6685FA-12E3-5C6B-B365-EEC8001AB761",
+      "E780A038-E398-5D95-9FDA-37857B6FD5A3"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "C6FA458F-755B-5205-9F7A-74DCC3B29B08",
+          "node": "E780A038-E398-5D95-9FDA-37857B6FD5A3",
+          "name": "Video",
+          "key": "Video",
+          "output": true,
+          "type": "video"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "01832759-2EE2-5F7B-959A-F3C3626316F3",
+          "name": "Density",
+          "node": "3E6685FA-12E3-5C6B-B365-EEC8001AB761",
+          "key": "density"
+        },
+        {
+          "id": "B99ABDD0-DFCE-578C-B6C3-506239EC80A2",
+          "name": "Star Size",
+          "node": "3E6685FA-12E3-5C6B-B365-EEC8001AB761",
+          "key": "size"
+        },
+        {
+          "id": "F390B7E1-D0FA-56F7-B363-AE51A4EF2DDB",
+          "name": "Seed",
+          "node": "3E6685FA-12E3-5C6B-B365-EEC8001AB761",
+          "key": "seed"
+        },
+        {
+          "id": "B8972278-6FE5-5F14-B4EC-C9FF860A7D3C",
+          "name": "Speed",
+          "node": "3E6685FA-12E3-5C6B-B365-EEC8001AB761",
+          "key": "speed"
+        }
+      ],
+      "preview": "E780A038-E398-5D95-9FDA-37857B6FD5A3"
+    }
+  },
+  "nodes": [
+    {
+      "id": "3E6685FA-12E3-5C6B-B365-EEC8001AB761",
+      "kind": "fieldShader",
+      "name": "Starfield",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true,
+      "file": "bundle:User Nodes/Composition/Starfield.metal",
+      "fieldParameters": [
+        {
+          "key": "density",
+          "title": "Density",
+          "min": 5,
+          "max": 85,
+          "initial": 28
+        },
+        {
+          "key": "size",
+          "title": "Star Size",
+          "min": 0.015,
+          "max": 0.16,
+          "initial": 0.08
+        },
+        {
+          "key": "seed",
+          "title": "Seed",
+          "min": 1,
+          "max": 1000,
+          "initial": 35,
+          "step": 1
+        },
+        {
+          "key": "speed",
+          "title": "Speed",
+          "min": -4,
+          "max": 4,
+          "initial": 0.6,
+          "scalesFieldTime": true
+        }
+      ]
+    },
+    {
+      "id": "E780A038-E398-5D95-9FDA-37857B6FD5A3",
+      "kind": "fieldRender",
+      "name": "Render Field",
+      "position": {
+        "x": 275,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [
+    {
+      "id": "B936D600-6AA4-5FAF-A5CA-6A8AC30BBF85",
+      "source": "3E6685FA-12E3-5C6B-B365-EEC8001AB761",
+      "target": "E780A038-E398-5D95-9FDA-37857B6FD5A3",
+      "outputID": "Field",
+      "inputID": "Field"
+    }
+  ],
+  "midiMappings": []
+}

@@ -1,0 +1,60 @@
+{
+  "version": 2,
+  "component": {
+    "id": "39323386-39B0-54B1-A027-A06FE6F005F9",
+    "name": "Solid",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "53181373-AE77-5EFD-91D7-6DDFAD580A44"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "B0CC3582-03E1-58AB-905C-56D7B529F46D",
+          "node": "53181373-AE77-5EFD-91D7-6DDFAD580A44",
+          "name": "Trace",
+          "key": "Trace",
+          "output": true,
+          "type": "trace"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "CA3BD381-996C-50FA-8430-FD129DEB8E4C",
+          "name": "Color",
+          "node": "53181373-AE77-5EFD-91D7-6DDFAD580A44",
+          "key": "tint"
+        },
+        {
+          "id": "BAC208AC-5BBF-5C94-8F00-5372E3819653",
+          "name": "Beat breathe",
+          "node": "53181373-AE77-5EFD-91D7-6DDFAD580A44",
+          "key": "breathe"
+        }
+      ],
+      "preview": "53181373-AE77-5EFD-91D7-6DDFAD580A44"
+    }
+  },
+  "nodes": [
+    {
+      "id": "53181373-AE77-5EFD-91D7-6DDFAD580A44",
+      "kind": "traceSolid",
+      "name": "Solid",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "tint": 4202592,
+        "breathe": 0.0
+      },
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

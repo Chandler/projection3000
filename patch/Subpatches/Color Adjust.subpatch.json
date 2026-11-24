@@ -1,0 +1,102 @@
+{
+  "version": 2,
+  "component": {
+    "id": "56ED3963-594D-5138-BADD-4C4AA45EBBB2",
+    "name": "Color Adjust",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6"
+    ],
+    "interface": {
+      "processingInput": "35FCE067-AAB2-5B12-9959-305B419273A1",
+      "preview": "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6",
+      "ports": [
+        {
+          "id": "35FCE067-AAB2-5B12-9959-305B419273A1",
+          "node": "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6",
+          "name": "Video",
+          "key": "Video",
+          "type": "video",
+          "output": false
+        },
+        {
+          "id": "6369D47A-F532-5012-8A91-D87A0F31DEBB",
+          "node": "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6",
+          "name": "Video",
+          "key": "Video",
+          "type": "video",
+          "output": true
+        }
+      ],
+      "parameters": [
+        {
+          "id": "5EB7DCDB-1DBA-5DEF-99C6-88E694DBF815",
+          "name": "Exposure",
+          "node": "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6",
+          "key": "exposure"
+        },
+        {
+          "id": "E3A07ADC-C516-5B05-B50D-78A3E4D01EC2",
+          "name": "Black Point",
+          "node": "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6",
+          "key": "blackPoint"
+        },
+        {
+          "id": "703D5A37-F38C-5D71-A9D5-47479A564E6F",
+          "name": "White Point",
+          "node": "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6",
+          "key": "whitePoint"
+        },
+        {
+          "id": "2F5A1E20-F0F0-541B-B9BB-024A22FD6515",
+          "name": "Gamma",
+          "node": "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6",
+          "key": "gamma"
+        },
+        {
+          "id": "A25A9F42-0F24-5CAE-B5B3-E3F3D21B74CD",
+          "name": "Contrast",
+          "node": "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6",
+          "key": "contrast"
+        },
+        {
+          "id": "36154E98-F73A-58EE-A618-511375FB6CCA",
+          "name": "Hue",
+          "node": "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6",
+          "key": "hue"
+        },
+        {
+          "id": "8CF94BE1-474B-5B01-BDFE-604796F61A45",
+          "name": "Saturation",
+          "node": "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6",
+          "key": "saturation"
+        },
+        {
+          "id": "B1337366-2CC1-5FA6-B566-77C488FAED66",
+          "name": "Mix",
+          "node": "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6",
+          "key": "mix"
+        }
+      ]
+    },
+    "collapsed": true
+  },
+  "nodes": [
+    {
+      "id": "25DBEC7B-6CDD-5BA8-A9D4-A7E08EE184C6",
+      "kind": "color",
+      "name": "Color Adjust",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

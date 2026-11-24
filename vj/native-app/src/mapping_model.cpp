@@ -124,7 +124,6 @@ Json mappingSnapshot(const Json& document,const std::string& mid,const Json& sel
     if(document.contains("layouts")&&document["layouts"].contains(lid)){const auto& layout=document["layouts"][lid];result["layout"]={{"id",lid},{"name",layout["name"]},{"modified",objects(result["project"])!=layout["objects"]}};}
     result.erase("layoutId");result["selectedRectIds"]=Json::array();for(const auto& id:selection)for(const auto& rect:result["project"]["rects"])if(rect["id"]==id)result["selectedRectIds"].push_back(id);
     std::set<std::string> effects={"media_collection","patch_collection","patch_trace"},traces={"patch_trace"},activeSources,traceSources;
-    for(const auto& effect:collectionEffectCatalog()){effects.insert(effect["name"]);if(effect["kind"]=="trace")traces.insert(effect["name"]);}
     if(document.contains("grid")){
         const auto& grid=document["grid"];
         for(auto bus=grid["running"].begin();bus!=grid["running"].end();++bus)for(const auto* bank:{"selections","selections_b"}){

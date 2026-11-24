@@ -20,6 +20,7 @@ public struct SubpatchInterface: Codable, Equatable, Sendable {
     public var ports: [SubpatchPort]
     public var parameters: [SubpatchParameter]
     public var preview: UUID?
+    public var processingInput: UUID? = nil
 }
 
 public struct SubpatchTemplate: Codable, Sendable {
@@ -145,6 +146,9 @@ extension Graph {
         guard let interface = group.interface else { return }
         let members = Set(group.members)
         guard interface.preview.map(members.contains) ?? true else { throw GraphError("Subpatch preview must be a member") }
+        if let id = interface.processingInput {
+            guard interface.ports.contains(where:{ $0.id == id && !$0.output && $0.type == .video }) else { throw GraphError("The clip input must be an exposed Video input") }
+        }
         var ids = Set<UUID>(), addresses = Set<String>()
         for port in interface.ports {
             guard ids.insert(port.id).inserted, addresses.insert("\(port.node):\(port.output):\(port.key)").inserted,
@@ -207,7 +211,7 @@ extension Graph {
             }
             if !enableOutputs {
                 if member.kind == .apc40 { throw GraphError("Activate devices and outputs to reserve the APC40 controller") }
-                if member.kind.isOutput || [.audioInput,.microphone,.webcam,.midiIn,.ndiIn,.liveStream].contains(member.kind) { member.enabled = false }
+                if member.kind.isOutput || [.audioInput,.microphone,.webcam,.midiIn,.ndiIn,.syphonIn,.liveStream].contains(member.kind) { member.enabled = false }
                 if [.mux,.layerMux].contains(member.kind) { member.parameters["followAPC"] = 0 }
                 for (key,type) in zip(member.publishablePortIDs,member.publishableTypes) where [.video,.collection,.trace,.palette,.control].contains(type) {
                     var publication = member.publications?[key] ?? OutputPublication()

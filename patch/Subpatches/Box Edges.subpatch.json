@@ -1,0 +1,67 @@
+{
+  "version": 2,
+  "component": {
+    "id": "219CD6FA-0BBE-5FE9-B08E-354CFFFEA777",
+    "name": "Box Edges",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "AA52B178-C213-5710-9131-9517A9E2EBAC"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "3863261B-4C2C-5CBB-8676-5105AF3310CB",
+          "node": "AA52B178-C213-5710-9131-9517A9E2EBAC",
+          "name": "Collection",
+          "key": "Collection",
+          "output": true,
+          "type": "collection"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "62E22AF4-28D6-5A76-8683-6307EB8A49CC",
+          "name": "Color",
+          "node": "AA52B178-C213-5710-9131-9517A9E2EBAC",
+          "key": "color"
+        },
+        {
+          "id": "933C259B-6069-5890-B472-C6471A952256",
+          "name": "Width",
+          "node": "AA52B178-C213-5710-9131-9517A9E2EBAC",
+          "key": "thickness"
+        },
+        {
+          "id": "1705C1B2-C597-5DD1-AEBD-60B65A784F7B",
+          "name": "Brightness",
+          "node": "AA52B178-C213-5710-9131-9517A9E2EBAC",
+          "key": "brightness"
+        }
+      ],
+      "preview": "AA52B178-C213-5710-9131-9517A9E2EBAC"
+    }
+  },
+  "nodes": [
+    {
+      "id": "AA52B178-C213-5710-9131-9517A9E2EBAC",
+      "kind": "boxEdges",
+      "name": "Box Edges",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "color": 16777215,
+        "thickness": 3.0,
+        "brightness": 1.0
+      },
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

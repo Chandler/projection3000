@@ -1,6 +1,7 @@
 #pragma once
 #include <nlohmann/json.hpp>
 #include <filesystem>
+#include <functional>
 #include <mutex>
 #include <map>
 #include <vector>
@@ -31,6 +32,8 @@ public:
     Json playbackRuntime() const;
     void setPaletteSources(const Json& sources);
     Json paletteSources() const;
+    using LibraryRequest = std::function<Reply(const std::string&,const std::string&,const Json&)>;
+    void setLibraryRequest(LibraryRequest request) { libraryRequest_=std::move(request); }
     void setPatchOutputs(Json sources);
     Json patchOutputs() const;
     Json patchReferences() const;
@@ -67,6 +70,7 @@ public:
     Json effectCatalog() const;
     std::optional<MediaHttpAsset> mediaAsset(const std::string& path,const Json& query) const;
 private:
+    LibraryRequest libraryRequest_;
     std::array<std::atomic<double>,8> channelFaders_{{-1,-1,-1,-1,-1,-1,-1,-1}};
     std::atomic<bool> patchAPCOwned_{false};
     std::atomic<bool> patchCrossfaderFollow_{false};

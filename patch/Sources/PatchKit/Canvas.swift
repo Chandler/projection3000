@@ -33,8 +33,8 @@ extension NSColor {
 }
 func drawText(_ text: String, _ rect: NSRect, size: CGFloat = 12, color: NSColor = .labelColor, weight: NSFont.Weight = .regular, mono: Bool = false) {
     guard rect.width > 0, rect.height > 0, let context = NSGraphicsContext.current?.cgContext else { return }
-    let font = mono ? NSFont.monospacedSystemFont(ofSize:size,weight:weight) : NSFont.systemFont(ofSize:size,weight:weight)
-    let ctFont = CTFontCreateWithName(font.fontName as CFString,size,nil)
+    let font = mono ? NSFont.monospacedDigitSystemFont(ofSize:size,weight:weight) : NSFont.systemFont(ofSize:size,weight:weight)
+    let ctFont = font as CTFont
     // Construct native Core Foundation attributes explicitly. Avoid a lazily
     // bridged Swift dictionary in NSString's CoreText drawing/copying path.
     let value = CFAttributedStringCreateMutable(nil,0)!
@@ -567,16 +567,16 @@ final class GraphCanvas: NSView {
             let title = node.catalogTitle
             let renamed = node.name != title
             if compact {
-                let headerSize = min(32,13/max(zoom,0.01))
+                let headerSize = min(32,(large ? 15 : EditorTypography.title)/max(zoom,0.01))
                 drawText(title,.init(x:r.minX+22,y:r.minY+6,width:r.width-30,height:headerSize*1.3),size:headerSize,weight:.semibold)
                 if renamed {
                     drawText(node.name,.init(x:r.minX+10,y:r.minY+8+headerSize*1.3,width:r.width-20,height:headerSize*1.2),size:headerSize*0.85,color:.secondaryLabelColor)
                 }
                 continue
             }
-            drawText(title,.init(x:r.minX+24,y:r.minY+(renamed ? 2 : 8),width:r.width-55,height:22),size:large ? 18 : 15,weight:.semibold)
+            drawText(title,.init(x:r.minX+24,y:r.minY+(renamed ? 2 : 8),width:r.width-55,height:22),size:large ? 16 : EditorTypography.title,weight:.semibold)
             if renamed {
-                drawText(node.name,.init(x:r.minX+24,y:r.minY+21,width:r.width-55,height:18),size:large ? 14 : 12,color:.secondaryLabelColor)
+                drawText(node.name,.init(x:r.minX+24,y:r.minY+21,width:r.width-55,height:18),size:large ? 13 : EditorTypography.item,color:.secondaryLabelColor)
             }
             if node.kind.outputType == .geometry {
                 drawText("∿", .init(x:r.minX+70,y:r.minY+94,width:90,height:68),size:62,color:color,weight:.ultraLight)
@@ -884,7 +884,7 @@ final class GraphCanvas: NSView {
         let id = UUID()
         workspace.edit("Add Connected Node") { graph in
             var node = Node(kind:choice.entry.kind,position:choice.position,id:id)
-            node.fieldParameters = choice.entry.fieldParameters
+            node.configureShaderParameters(choice.entry.fieldParameters)
             node.file = choice.entry.file?.path
             node.controlStyle = choice.entry.controlStyle
             node.name = graph.availableName(choice.entry.title)
@@ -956,6 +956,7 @@ final class GraphCanvas: NSView {
         item("Create Component",#selector(contextComponent),workspace.selectedIDs.count > 1)
         let group = workspace.selected.flatMap { workspace.graph.component($0) }
         item("Extract Subpatch",#selector(extractSubpatch),workspace.selectedIDs.count > 1 || (group != nil && group?.interface == nil))
+        if group?.interface != nil { item("Save to Library…",#selector(saveSubpatchToLibrary)) }
         item("Insert Subpatch…",#selector(importSubpatch))
         item(group?.collapsed == true ? "Expand Component" : "Collapse Component",#selector(contextToggle),group != nil)
         item("Ungroup Component",#selector(contextUngroup),group != nil)
@@ -974,9 +975,10 @@ final class GraphCanvas: NSView {
     @objc private func contextFrame() { fit() }
     @objc private func contextLayout() { workspace.autoLayout(); fit() }
     @objc private func extractSubpatch() { workspace.extractSubpatch() }
+    @objc private func saveSubpatchToLibrary() { if let id = workspace.selected { workspace.saveSubpatchToLibrary(id) } }
     @objc private func importSubpatch() { workspace.importSubpatch(at:insertionPoint) }
     @objc private func toggleLabelSize() { largeLabels.toggle(); needsDisplay = true }
-    @objc private func frameSelection() {
+    @objc func frameSelection() {
         let boxes = workspace.selectedIDs.compactMap { id -> NSRect? in
             if let group = workspace.graph.component(id) ?? workspace.graph.collapsedOwner(id) { return componentRect(group) }
             return workspace.graph.node(id).map(rect)
@@ -1117,6 +1119,14 @@ final class GraphCanvas: NSView {
     }
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if let value = sender.draggingPasteboard.string(forType:.string), value.hasPrefix("patch-source:") || value.hasPrefix("patch-subpatch:") {
+            let p = world(convert(sender.draggingLocation,from:nil)), position = Position(p.x-105,p.y-40)
+            do {
+                if value.hasPrefix("patch-source:") { try workspace.insertLibrarySource(String(value.dropFirst("patch-source:".count)),at:position) }
+                else { _ = try workspace.insertLibrarySubpatch(String(value.dropFirst("patch-subpatch:".count)),at:position) }
+                return true
+            } catch { workspace.message = error.localizedDescription; return false }
+        }
         if let value = sender.draggingPasteboard.string(forType:.string), value.hasPrefix("patch-user:"), let entry = UserNodeLibrary.shared.entries.first(where:{ $0.file?.path == String(value.dropFirst(11)) }) {
             let p = world(convert(sender.draggingLocation,from:nil)); workspace.addUserNode(entry,at:.init(p.x-105,p.y-40)); return true
         }

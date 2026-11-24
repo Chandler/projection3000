@@ -6,7 +6,9 @@ namespace {
 using J=vj::Json;
 NSString* text(const std::string& s){return [NSString stringWithUTF8String:s.c_str()]?:@"";}
 NSString* folded(NSString* s){return [[s stringByFoldingWithOptions:NSCaseInsensitiveSearch|NSDiacriticInsensitiveSearch locale:[NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"]] lowercaseString];}
-std::string identity(const J& item){return item.value("effect",std::string{})+"\n"+item.value("name",std::string{})+"\n"+item.value("params",J::object()).dump();}
+std::string identity(const J& item){
+ if(item.contains("subpatchID"))return J::array({item.at("subpatchID"),item.at("outputID")}).dump();
+ return item.value("effect",std::string{})+"\n"+item.value("name",std::string{})+"\n"+item.value("params",J::object()).dump();}
 NSString* detail(const J& item){
  auto section=item.value("section",std::string{}),effect=item.value("effect",std::string{});
  if(section=="Files")return text((effect=="video"?"Video":"Image")+std::string(" · ")+item.value("path",item.value("params",J::object()).value("file",std::string{})));
@@ -110,7 +112,7 @@ NSString* detail(const J& item){
 }
 - (void)accept:(id)sender {
     (void)sender;if(_closed)return;auto row=_table.selectedRow;if(row<0||size_t(row)>=_matches.size())return;
-    auto item=_items[_matches[row]];auto completion=_completion;[self cancel];if(completion)completion({{"effect",item["effect"]},{"name",item["name"]},{"params",item.value("params",J::object())}});
+    auto item=_items[_matches[row]];auto completion=_completion;[self cancel];if(item.contains("subpatchID")){if(completion)completion({{"subpatchID",item["subpatchID"]},{"outputID",item["outputID"]},{"name",item["name"]}});return;}if(completion)completion({{"effect",item["effect"]},{"name",item["name"]},{"params",item.value("params",J::object())}});
 }
 - (void)cancel {
     if(_closed)return;_closed=YES;if(_keys){[NSEvent removeMonitor:_keys];_keys=nil;}_completion=nil;[self.window.parentWindow removeChildWindow:self.window];[self.window orderOut:nil];

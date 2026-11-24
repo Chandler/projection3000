@@ -20,6 +20,8 @@ cp Sources/PatchKit/Resources/Shaders.metal "$app/Contents/Resources/"
 if [ -d "User Nodes" ]; then
   ditto "User Nodes" "$app/Contents/Resources/User Nodes"
 fi
+ditto ../vj/static/fonts "$app/Contents/Resources/fonts"
+ditto Subpatches "$app/Contents/Resources/Subpatches"
 cp Info.plist "$app/Contents/Info.plist"
 if [ ! -f .build/Patch.icns ] || [ scripts/make-icon.swift -nt .build/Patch.icns ]; then
   swift scripts/make-icon.swift .build/Patch.iconset

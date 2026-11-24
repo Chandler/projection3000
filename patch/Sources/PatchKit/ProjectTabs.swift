@@ -188,13 +188,13 @@ extension AppController {
                 cell.layer?.backgroundColor=(selected ? NSColor.white.withAlphaComponent(0.07) : NSColor.clear).cgColor
                 let title=NSButton(title:tab.workspace.projectName + (tab.workspace.dirty ? " •" : ""),target:owner,action:#selector(selectTabButton(_:)))
                 title.identifier=NSUserInterfaceItemIdentifier(tab.tabID.uuidString); title.isBordered=false
-                title.font = .systemFont(ofSize:12,weight:selected ? .semibold:.regular)
+                title.font = .systemFont(ofSize:EditorTypography.body,weight:selected ? .semibold:.regular)
                 title.contentTintColor=selected ? .labelColor:.secondaryLabelColor; title.cell?.lineBreakMode = .byTruncatingTail
                 title.toolTip=tab.workspace.fileURL?.path ?? tab.workspace.projectName
                 let status=NSTextField(labelWithString:tab.changingRunState ? "Stopping…" : tab.tabRunning ? "Running" : "Stopped")
-                status.font = .systemFont(ofSize:10); status.textColor=tab.tabRunning ? .systemGreen:.secondaryLabelColor
+                status.font = .systemFont(ofSize:EditorTypography.caption); status.textColor=tab.tabRunning ? .systemGreen:.secondaryLabelColor
                 let run=NSButton(title:tab.tabRunning ? "Stop" : "Start",target:owner,action:#selector(runTabButton(_:)))
-                run.identifier=title.identifier; run.isBordered=false; run.font = .systemFont(ofSize:10,weight:.medium)
+                run.identifier=title.identifier; run.isBordered=false; run.font = .systemFont(ofSize:EditorTypography.caption,weight:.medium)
                 run.image=NSImage(systemSymbolName:tab.tabRunning ? "stop.fill":"play.fill",accessibilityDescription:tab.tabRunning ? "Stop tab":"Start tab")
                 run.imagePosition = .imageLeading; run.contentTintColor=tab.tabRunning ? .systemGreen:.secondaryLabelColor
                 run.toolTip=tab.tabRunning ? "Stop all nodes in this tab":"Start this tab"; run.isEnabled = !tab.changingRunState

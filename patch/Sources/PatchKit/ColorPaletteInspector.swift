@@ -12,7 +12,7 @@ struct PaletteOutputInspector: View {
         TimelineView(.periodic(from:.now,by:0.2)) { _ in
             let colors=renderer.colorPalette(id)?.colors ?? []
             VStack(alignment:.leading,spacing:6) {
-                Text("PALETTE · \(colors.count) COLORS").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+                Text("PALETTE · \(colors.count) COLORS").font(.editorHeading).foregroundStyle(.secondary)
                 if !colors.isEmpty {
                     ScrollView(.horizontal) {
                         HStack(spacing:2) {
@@ -62,7 +62,7 @@ struct ColorPaletteInspector: View {
         VStack(alignment:.leading,spacing:12) {
             schemeGrid
             HStack {
-                Text("ORDERED COLORS · \(colors.count)").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+                Text("ORDERED COLORS · \(colors.count)").font(.editorHeading).foregroundStyle(.secondary)
                 Spacer()
                 Button("New Variation") {
                     let seed=workspace.graph.node(id)?.value("seed") ?? 0
@@ -74,7 +74,7 @@ struct ColorPaletteInspector: View {
                 HStack(spacing:8) {
                     Text("\(i+1)").monospacedDigit().foregroundStyle(.secondary).frame(width:22)
                     PanelColorWell(selection:binding(i),title:"Palette color \(i+1)").frame(width:64,height:24)
-                    Text(String(format:"#%06X",colors[i].hex)).font(.system(size:10,design:.monospaced)).foregroundStyle(.secondary)
+                    Text(String(format:"#%06X",colors[i].hex)).font(.editorCaption.monospacedDigit()).foregroundStyle(.secondary)
                     Spacer(minLength:0)
                     Button { edit("Reorder Palette") { $0.swapAt(i,i-1) } } label: { Image(systemName:"arrow.up") }.disabled(i==0).help("Move color earlier")
                     Button { edit("Reorder Palette") { $0.swapAt(i,i+1) } } label: { Image(systemName:"arrow.down") }.disabled(i==colors.count-1).help("Move color later")
@@ -128,7 +128,7 @@ struct PaletteAdjustInspector: View {
     var body: some View {
         VStack(alignment:.leading,spacing:12) {
             HStack {
-                Text("COLOR ADJUSTMENT").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+                Text("COLOR ADJUSTMENT").font(.editorHeading).foregroundStyle(.secondary)
                 Spacer()
                 Button("Reset") {
                     workspace.beginGesture()
@@ -147,7 +147,7 @@ struct PaletteAdjustInspector: View {
                         Text(p.title)
                         Spacer()
                         Text((node?.value(p.key) ?? p.initial).formatted(.percent.precision(.fractionLength(0))))
-                            .font(.system(size:11,design:.monospaced)).foregroundStyle(.secondary)
+                            .font(.editorValue).foregroundStyle(.secondary)
                     }
                     ParameterControl(value:Binding(get:{ node?.value(p.key) ?? p.initial },set:{ workspace.parameter(id,p.key,$0) }),in:p.min...p.max,step:p.step,spec:p,onEditingChanged:{ editing in
                         if editing { workspace.beginGesture() } else { workspace.endGesture("Change \(p.title)") }

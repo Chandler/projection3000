@@ -1,0 +1,151 @@
+{
+  "version": 2,
+  "component": {
+    "id": "762D6E48-C310-5BBB-845F-5D13F9D844A7",
+    "name": "Sphere Gimbal",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "9F57F0D1-922B-5177-9F7A-4A7C267A6591",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "name": "Collection",
+          "key": "Collection",
+          "output": true,
+          "type": "collection"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "BB2A6BB6-3539-5994-B74C-36E88DC3F112",
+          "name": "Trail count",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "trails"
+        },
+        {
+          "id": "CA3B115A-A17F-5F16-A637-89350D7FB45B",
+          "name": "Orbit speed (rev/s)",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "speed"
+        },
+        {
+          "id": "2C9ACE93-14F8-501A-B7A4-041E02CAF333",
+          "name": "Tail length",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "tail"
+        },
+        {
+          "id": "B5083EB0-432D-5E90-B833-22A92380131D",
+          "name": "Fade start",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "fade_start"
+        },
+        {
+          "id": "B8B884C2-F081-545D-B1C7-E2C210DBF25D",
+          "name": "Tail fade",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "tail_fade"
+        },
+        {
+          "id": "5DCA5957-9917-5562-9A61-BAE56BCFB764",
+          "name": "Lateral spread",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "spread"
+        },
+        {
+          "id": "DE8CA45A-8699-53ED-9A54-6DD150FB2F49",
+          "name": "Line width",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "width"
+        },
+        {
+          "id": "87FCBD46-3FCA-50A2-A30C-359E68C46E1F",
+          "name": "X orientation",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "pose_x"
+        },
+        {
+          "id": "BFE5D373-2D12-503C-8313-DEC6FE67F30D",
+          "name": "Y orientation",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "pose_y"
+        },
+        {
+          "id": "F11C4639-5539-5ECC-9277-749F48128817",
+          "name": "Z orientation",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "pose_z"
+        },
+        {
+          "id": "F9BD8102-3B32-5D16-850B-A410A2E42205",
+          "name": "X rotation rate",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "rotate_x"
+        },
+        {
+          "id": "4A55ECE1-893A-5AF7-BFF9-093D64898175",
+          "name": "Y rotation rate",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "rotate_y"
+        },
+        {
+          "id": "1B1E137A-C168-5376-B6F8-55AD405D72A0",
+          "name": "Z rotation rate",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "rotate_z"
+        },
+        {
+          "id": "B3DAA54C-3E5E-5157-812D-6ABE01855382",
+          "name": "Brightness",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "brightness"
+        },
+        {
+          "id": "13D808BD-CD54-57C2-B8A2-2A1A2BC22757",
+          "name": "Color",
+          "node": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+          "key": "color"
+        }
+      ],
+      "preview": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13"
+    }
+  },
+  "nodes": [
+    {
+      "id": "55BF7A8E-9CDF-5C20-A4E3-B39DD005DD13",
+      "kind": "sphereGimbal",
+      "name": "Sphere Gimbal",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "trails": 24.0,
+        "speed": 2.0,
+        "tail": 0.025,
+        "fade_start": 0.0,
+        "tail_fade": 1.0,
+        "spread": 0.035,
+        "width": 0.012,
+        "pose_x": 0.0,
+        "pose_y": 0.0,
+        "pose_z": 0.0,
+        "rotate_x": 0.0,
+        "rotate_y": 0.0,
+        "rotate_z": 0.0,
+        "brightness": 1.0,
+        "color": 5630719
+      },
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

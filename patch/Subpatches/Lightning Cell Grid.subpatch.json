@@ -1,0 +1,137 @@
+{
+  "version": 2,
+  "component": {
+    "id": "6CC3F11B-45FD-5E2B-B523-B2222EFCEF1E",
+    "name": "Lightning Cell Grid",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "01C01619-E2E6-5833-8E86-960B167E8C7F"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "0082DA9C-9195-58D1-AF52-15AC1C4A3884",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "Video",
+          "name": "Video",
+          "type": "video",
+          "output": true
+        },
+        {
+          "id": "9CA33714-A0FB-5FB6-BA01-030CA09B20E0",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "Path",
+          "name": "Path",
+          "type": "vectorPath",
+          "output": true
+        }
+      ],
+      "parameters": [
+        {
+          "id": "EAAB2064-EA52-5CA1-B1AD-3E1825A75E4F",
+          "name": "Pulse rate",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "rate"
+        },
+        {
+          "id": "10CCF894-E320-51C5-8D8D-E3C8F81DDBF5",
+          "name": "Burstiness",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "burst"
+        },
+        {
+          "id": "6E48F0EF-824F-5C3C-BC0B-3FE1228317A3",
+          "name": "Speed",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "speed"
+        },
+        {
+          "id": "F8749E1E-43CA-5F1B-8B50-9BC14DA9583A",
+          "name": "Speed jitter",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "jitter"
+        },
+        {
+          "id": "05FC625D-064A-558A-A836-45B941806A5E",
+          "name": "Pulse length",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "length"
+        },
+        {
+          "id": "CB5FB199-BB25-56BE-80E5-E5E745DADEEC",
+          "name": "Afterglow",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "tail"
+        },
+        {
+          "id": "1CD7BAB1-B1E5-5411-9596-5D8CAAFA5B7C",
+          "name": "Crackle",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "crackle"
+        },
+        {
+          "id": "040BC473-5315-592B-8482-D4D3E8DF10B0",
+          "name": "Forks",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "forks"
+        },
+        {
+          "id": "D117818F-F5BB-5DB4-B273-66E440AD747B",
+          "name": "Top spray",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "top_spray"
+        },
+        {
+          "id": "F77A7803-460D-5106-90AB-802D353E3F23",
+          "name": "Brightness",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "brightness"
+        },
+        {
+          "id": "E33C1516-486F-5F1D-9AED-4E9C890E88AC",
+          "name": "Core",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "core"
+        },
+        {
+          "id": "6A9A3A02-AA03-5F80-9CE8-AA4654B217D9",
+          "name": "Glow",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "glow"
+        },
+        {
+          "id": "2D1E46FA-BB2A-5A65-B789-F21F87B25598",
+          "name": "Ion color",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "rainbow"
+        },
+        {
+          "id": "640B9581-C5DC-5829-8836-8E061F84897D",
+          "name": "From",
+          "node": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+          "key": "origin"
+        }
+      ],
+      "preview": "01C01619-E2E6-5833-8E86-960B167E8C7F"
+    }
+  },
+  "nodes": [
+    {
+      "id": "01C01619-E2E6-5833-8E86-960B167E8C7F",
+      "kind": "lightningCellGrid",
+      "name": "Lightning Cell Grid",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

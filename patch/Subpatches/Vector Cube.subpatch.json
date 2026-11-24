@@ -1,0 +1,125 @@
+{
+  "version": 2,
+  "component": {
+    "id": "E60CC734-EF70-50C5-AA2E-750A5AA7298B",
+    "name": "Vector Cube",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "406C7C1D-B52F-5BEB-B923-5454F87D21BD"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "C89D5F78-2A46-5D0E-972F-1E88C9982E41",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "Video",
+          "name": "Video",
+          "type": "video",
+          "output": true
+        },
+        {
+          "id": "DB6C7FCF-614C-56A5-A81B-03F7C1847945",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "Path",
+          "name": "Path",
+          "type": "vectorPath",
+          "output": true
+        }
+      ],
+      "parameters": [
+        {
+          "id": "4DF04961-A1A6-5D11-9D46-84A5214C0DAA",
+          "name": "Master speed",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "speed"
+        },
+        {
+          "id": "3347F495-A8D1-5AF3-B0CD-D70E9CE5513C",
+          "name": "X rotation",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "rotate_x"
+        },
+        {
+          "id": "560BC0FB-8623-5656-8179-726B2D315847",
+          "name": "Y rotation",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "rotate_y"
+        },
+        {
+          "id": "3AB7ADDD-EB58-5E9E-90F2-F14BDF95346A",
+          "name": "Z rotation",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "rotate_z"
+        },
+        {
+          "id": "C0921077-9896-57C4-B7C7-F5FCE47BB766",
+          "name": "X angle",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "pose_x"
+        },
+        {
+          "id": "82514FCB-A00E-5D9F-A5CF-45C8D00DE5ED",
+          "name": "Y angle",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "pose_y"
+        },
+        {
+          "id": "1E324757-2D73-5C0C-BF68-8C9CFD0A037E",
+          "name": "Z angle",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "pose_z"
+        },
+        {
+          "id": "7D2EF6A4-BE17-5C8A-AAF7-87D5554D023C",
+          "name": "View",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "projection"
+        },
+        {
+          "id": "AE8F804C-91AD-5E4B-B17E-C94DEEE3BCA3",
+          "name": "Size",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "size"
+        },
+        {
+          "id": "915F8F23-EBD8-572B-837C-29D097BCC1E7",
+          "name": "Glow color",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "glow"
+        },
+        {
+          "id": "4157AFD2-9F0A-53AD-BFE8-7D9364DB680B",
+          "name": "Core width",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "line_width"
+        },
+        {
+          "id": "B034D8A3-BB0F-58F3-8710-9E9CAA935EFD",
+          "name": "Glow radius",
+          "node": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+          "key": "glow_width"
+        }
+      ],
+      "preview": "406C7C1D-B52F-5BEB-B923-5454F87D21BD"
+    }
+  },
+  "nodes": [
+    {
+      "id": "406C7C1D-B52F-5BEB-B923-5454F87D21BD",
+      "kind": "vectorCube",
+      "name": "Vector Cube",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

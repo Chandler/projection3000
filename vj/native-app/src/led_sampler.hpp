@@ -17,15 +17,10 @@ public:
                              std::map<std::string,std::array<int,2>>& sizes);
     // Call whenever the same scene is applied to the render graph.
     void configure(const NativeScene& scene);
-    // Populate projected trace motion anchors, then retain the same scene for LEDs.
-    void configure(NativeScene& scene);
     // Call once per frame after graph.render, before binding destination FBOs.
     Frames render(const SceneJson& snapshot,NativeRenderGraph& graph,double flash=0);
     SceneJson diagnostics()const;
 private:
     struct Impl;std::unique_ptr<Impl> impl_;
 };
-// Pure evaluator, useful for comparing against original trace_effects.evaluate.
-std::array<float,3> evaluateTrace(const std::string& name,double x,double seconds,
-    double beat,const SceneJson& params,unsigned instance=0);
 }

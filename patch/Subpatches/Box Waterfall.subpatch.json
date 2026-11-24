@@ -1,0 +1,95 @@
+{
+  "version": 2,
+  "component": {
+    "id": "51E74194-0C21-5DBC-847B-7C80DC568A46",
+    "name": "Box Waterfall",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "6BF1C29E-7D7B-5C4F-9194-3CFE49943B43"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "63AF70C2-E20B-5DD8-9F85-C18D5D35ECC7",
+          "node": "6BF1C29E-7D7B-5C4F-9194-3CFE49943B43",
+          "name": "Collection",
+          "key": "Collection",
+          "output": true,
+          "type": "collection"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "1BB3BBC9-59C7-55DF-886B-6A10A5C18601",
+          "name": "Speed",
+          "node": "6BF1C29E-7D7B-5C4F-9194-3CFE49943B43",
+          "key": "speed"
+        },
+        {
+          "id": "50123492-D4DA-515C-B459-2D12581FA8BD",
+          "name": "Streams",
+          "node": "6BF1C29E-7D7B-5C4F-9194-3CFE49943B43",
+          "key": "density"
+        },
+        {
+          "id": "E3BA724A-1208-564C-BA0D-C251DC504B7D",
+          "name": "Width",
+          "node": "6BF1C29E-7D7B-5C4F-9194-3CFE49943B43",
+          "key": "width"
+        },
+        {
+          "id": "FF51082E-90FA-5234-85BB-3C59579083D3",
+          "name": "Foam",
+          "node": "6BF1C29E-7D7B-5C4F-9194-3CFE49943B43",
+          "key": "foam"
+        },
+        {
+          "id": "CBB48FB2-4315-5329-B805-33BC7C23FBE0",
+          "name": "Brightness",
+          "node": "6BF1C29E-7D7B-5C4F-9194-3CFE49943B43",
+          "key": "brightness"
+        },
+        {
+          "id": "58915E19-F94A-5D6E-8300-96D31F569B0D",
+          "name": "Turbulence",
+          "node": "6BF1C29E-7D7B-5C4F-9194-3CFE49943B43",
+          "key": "turbulence"
+        },
+        {
+          "id": "D6B9E390-8065-533F-9BBF-877BCC256385",
+          "name": "Color",
+          "node": "6BF1C29E-7D7B-5C4F-9194-3CFE49943B43",
+          "key": "color"
+        }
+      ],
+      "preview": "6BF1C29E-7D7B-5C4F-9194-3CFE49943B43"
+    }
+  },
+  "nodes": [
+    {
+      "id": "6BF1C29E-7D7B-5C4F-9194-3CFE49943B43",
+      "kind": "boxWaterfall",
+      "name": "Box Waterfall",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "speed": 0.65,
+        "density": 8.0,
+        "width": 0.35,
+        "foam": 0.6,
+        "brightness": 0.85,
+        "turbulence": 0.35,
+        "color": 5618687
+      },
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

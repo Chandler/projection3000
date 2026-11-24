@@ -40,6 +40,77 @@ static Class syphonClass(void) {
 - (void)dealloc { [_server stop]; }
 @end
 
+@protocol PatchSyphonDirectoryAPI
++ (instancetype)sharedDirectory;
+- (NSArray<NSDictionary *> *)servers;
+@end
+@protocol PatchSyphonClientAPI
+- (instancetype)initWithServerDescription:(NSDictionary *)description device:(id<MTLDevice>)device options:(NSDictionary *)options newFrameHandler:(void (^)(id))handler;
+- (BOOL)isValid;
+- (id<MTLTexture>)newFrameImage;
+- (void)stop;
+@end
+
+static NSArray<NSDictionary *> *syphonServers(void) {
+    if (!syphonClass()) return @[];
+    Class<PatchSyphonDirectoryAPI> directory = (Class)NSClassFromString(@"SyphonServerDirectory");
+    return [[directory sharedDirectory] servers] ?: @[];
+}
+
+@implementation PatchSyphonInput {
+    NSDictionary *_selection;
+    id<MTLDevice> _device;
+    id<PatchSyphonClientAPI> _client;
+    NSString *_connectedUUID;
+    NSTimeInterval _nextDiscovery;
+}
++ (NSArray *)sources {
+    NSMutableArray *items = [NSMutableArray array];
+    for (NSDictionary *server in syphonServers()) {
+        [items addObject:@{@"app":server[@"SyphonServerDescriptionAppNameKey"] ?: @"",
+                           @"name":server[@"SyphonServerDescriptionNameKey"] ?: @"",
+                           @"uuid":server[@"SyphonServerDescriptionUUIDKey"] ?: @""}];
+    }
+    return items;
+}
+- (instancetype)initWithSelection:(NSDictionary *)selection device:(id<MTLDevice>)device {
+    if ((self = [super init])) {
+        _selection = [selection copy]; _device = device; _status = @"Offline";
+    }
+    return self;
+}
+- (void)refreshConnection {
+    NSDictionary *exact = nil, *named = nil;
+    NSUInteger count = 0;
+    for (NSDictionary *server in syphonServers()) {
+        if ([_selection[@"uuid"] length] && [server[@"SyphonServerDescriptionUUIDKey"] isEqual:_selection[@"uuid"]]) {
+            exact = server; break;
+        }
+        if ([(server[@"SyphonServerDescriptionAppNameKey"] ?: @"") isEqual:_selection[@"app"]] &&
+            [(server[@"SyphonServerDescriptionNameKey"] ?: @"") isEqual:_selection[@"name"]]) {
+            named = server; count++;
+        }
+    }
+    NSDictionary *match = exact ?: (count == 1 ? named : nil);
+    NSString *uuid = match[@"SyphonServerDescriptionUUIDKey"];
+    if (match && [_connectedUUID isEqual:uuid] && [_client isValid]) return;
+    [_client stop]; _client = nil; _connectedUUID = nil;
+    if (!match) { _status = count > 1 ? @"Ambiguous source" : @"Offline"; return; }
+    Class clientClass = NSClassFromString(@"SyphonMetalClient");
+    _client = [(id<PatchSyphonClientAPI>)[clientClass alloc] initWithServerDescription:match device:_device options:nil newFrameHandler:nil];
+    _connectedUUID = uuid; _status = @"Waiting for frames";
+}
+- (id<MTLTexture>)currentTexture {
+    NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
+    if (now >= _nextDiscovery) { _nextDiscovery = now + 1; [self refreshConnection]; }
+    if (!_client.isValid) return nil;
+    id<MTLTexture> texture = [_client newFrameImage];
+    _status = texture ? @"Connected" : @"Waiting for frames";
+    return texture;
+}
+- (void)dealloc { [_client stop]; }
+@end
+
 // ABI for NDI's documented C send API (video_frame_v2 and send_create).
 typedef struct { const char *name, *groups; bool clockVideo, clockAudio; } SendSettings;
 typedef struct {

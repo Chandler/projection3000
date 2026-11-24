@@ -112,7 +112,7 @@ struct BlindsInspector: View {
     }
     func section<Content: View>(_ title: String,@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment:.leading,spacing:12) {
-            Text(title.uppercased()).font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+            Text(title.uppercased()).font(.editorHeading).foregroundStyle(.secondary)
             content()
         }.frame(maxWidth:.infinity,alignment:.leading).padding(10)
             .background(.primary.opacity(0.035),in:RoundedRectangle(cornerRadius:6))

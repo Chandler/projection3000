@@ -1,7 +1,6 @@
 #include "render_scene.hpp"
 #include "control_model.hpp"
 #include "live_sources.hpp"
-#include "vector_catalog.hpp"
 #include <algorithm>
 
 namespace vj {
@@ -82,6 +81,7 @@ NativeScene renderScene(const Json& snapshot,const std::vector<std::string>& out
                 const auto column=selections[rid].get<std::string>();
                 if(!row["clips"].contains(column))continue;
                 const auto& clip=row["clips"][column];
+                if(clip.value("nativeImportUnsupported",false))continue;
                 NativeLayer layer;
                 layer.id=index;
                 layer.source_id=clip["id"];
@@ -96,7 +96,7 @@ NativeScene renderScene(const Json& snapshot,const std::vector<std::string>& out
                 layer.resolved_file=clip.value("resolved_file",std::string{});mediaAssets(layer,clip);
                 layer.params=clip["params"];
                 if(clip.contains("patchControls"))layer.params["_patch_controls"]=clip["patchControls"];
-                if(clip.contains("vector"))layer.vector=clip["vector"];else if(!layer.generator.starts_with("external_"))for(const auto& spec:effects)if(spec["name"]==layer.generator&&spec.value("vector",false))layer.vector=vectorRecipe(layer.generator,layer.params,1920,1080);
+                if(clip.contains("vector"))layer.vector=clip["vector"];
                 if(layer.generator=="media_collection")layer.params["_resolved_items"]=clip.value("resolvedItems",Json::array());
                 if(layer.generator=="ndi"||layer.generator=="syphon"||layer.generator=="usb_webcam")layer.resolved_file=normalizeLiveSelection(layer.generator,layer.params.value(layer.generator=="usb_webcam"?"device":"source",std::string{}));
                 layer.opacity=clip.value("opacity",1.f);

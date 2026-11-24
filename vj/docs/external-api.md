@@ -264,7 +264,7 @@ The grid is also available at `state.grid` in `/api/v1/state` and event messages
   "columns": [{"id":"column_…","name":"1"}],
   "rows": [{
     "id":"row_…","name":"Base","blend":"normal","enabled":true,
-    "clips":{"column_…":{"id":"clip_…","name":"Orange","gen":"solid_color","params":{"color":"#ff8000"}}}
+    "clips":{"column_…":{"id":"clip_…","name":"Orange","gen":"patch_video","params":{"source":"patch:NODE_UUID:0"}}}
   }],
   "selections": {"program":{"row_…":"column_…"}},
   "running": {"program":true}
@@ -314,17 +314,17 @@ LED looks remain separate.
 
 ## Use the existing controls first
 
-The compact effect/filter list is at the end of **this document**. Follow an
-effect link or GET /api/v1/effects/{name} for its parameters, defaults, ranges and
-choices. Read the list before writing or uploading custom code.
+Built-in artwork and processors are Patch templates. Discover them with
+`GET /api/v1/library/subpatches`. Native media sources and uploaded modules
+publish their clip schemas at `GET /api/v1/effects`.
 
 | Desired change | Existing mechanism |
 |---|---|
-| One solid color | Load `solid_color`, set `color` to `#rrggbb` |
-| Animated two-color wash | Load `gradient`; color_a/color_b, angle, speed, breathe |
-| Change colors/levels of existing raster content | Add `color_adjust` above it; exposure, contrast, gamma, saturation, hue, temperature, tint, black/white points |
-| RGB split, lens distortion, zoom | Add `lens_adjust` above raster content |
-| Moving colored bars | Load or stack `scan_lines`; tint, rate, spacing, width, blur, angle, amount |
+| One solid color | Place Solid Color and edit its Color control |
+| Two-color wash | Place Gradient |
+| Change levels on Patch video | Place Color Adjust on its clip |
+| RGB split, lens distortion, zoom | Place Lens Adjust on its clip |
+| Moving colored bars | Place Scan Lines |
 | Text, still image, video, camera | Existing `text`, `image`, `video`, `usb_webcam` sources; inspect their parameters |
 | Layer strength, compositing, visibility | Grid `set_clip`: opacity and blend; `set_row`: enabled; shared across Outs |
 | Stacking and order | Grid `add_row`, `move_row`, `delete_row`; list order is bottom to top |
@@ -337,11 +337,9 @@ choices. Read the list before writing or uploading custom code.
 | Toggle selected mapper surfaces between Live and Pattern | Press ⌘L in the Mapping UI; selected collections switch as a unit |
 | A new procedural design not covered above | Upload AssemblyScript/WASM using the SDK below |
 
-Filters apply to the **composited layers below them**, including rasterized
-vectors, not to one mapped card independently. Stacking vectors is allowed and
-preserves the existing layers. Master mixer controls are
-separate from layer filters. Mapping grids/alignment are calibration tools;
-show content belongs in output compositions, not new mapping graphics.
+An adjustment occupies its own clip slot. When launched, it processes the
+composited video from active layers below it in the same Out bank. Place it
+above the source in the same column to launch both together.
 
 A shared output can carry multiple colors. For example, to give nine
 cards nine distinct solid colors, load one nine-band image on an unused output
@@ -351,33 +349,32 @@ Full-frame Solid Color is the simpler choice when a whole output needs one color
 
 ## Raster source and filter example
 
-Using the `api` helper from the quick start below:
+The following example creates separate clips and launches their column.
 
 ```js
-await api('/outputs/out1', {action:'load', effect:'solid_color',
-  params:{color:'#ff8000'}});
+const {subpatches} = await api('/library/subpatches');
 const {grid} = await api('/grid');
 const column = grid.columns[0].id;
-const {result: filter} = await api('/grid', {action:'add_row', name:'Color'});
-await api('/grid', {action:'put_clip', row:filter.id, column,
-  effect:'color_adjust', params:{exposure:-0.5, saturation:0.8}});
-await api('/grid', {action:'launch_clip', row:filter.id, column, bus:'out1'});
-await api('/grid', {action:'set_clip', row:filter.id, column,
-  params:{hue:30}});
-await api('/grid', {action:'set_clip', row:filter.id, column,
-  opacity:0.75, blend:'normal'});
-// dir:-1 moves one step toward the bottom; +1 moves toward the top.
-await api('/grid', {action:'move_row', row:filter.id, dir:-1});
-await api('/grid', {action:'delete_row', row:filter.id});
+for (const name of ['Plasma', 'Dither']) {
+  const {result: row} = await api('/grid', {action:'add_row', name});
+  const template = subpatches.find(item => item.bundled && item.name === name);
+  const output = template.outputs.find(port => port.composeType === 'video');
+  await api('/grid', {action:'put_clip', row:row.id, column,
+    subpatchID:template.id, outputID:output.id});
+}
+await api('/grid', {action:'launch_column', column, bus:'out1'});
 ```
 
-`load` replaces the output's entire stack; `add_layer` preserves existing raster
-content and appends above it. Do not `load` an adjustment by itself; there would
-be nothing beneath it to adjust. Video seek/loop/audio, image scale/position/fit,
-text formatting and camera gain/rotation are all ordinary `params` changes.
-For image/video `file`, use the file value from GET /api/images or /api/videos,
-or the matching choice in the effect detail response. Adding media through the existing
-library makes it available to these sources; no new rendering feature is needed.
+Placement returns the instance ID and exposed controls. Send a `parameter`
+command to the embedded Patch API using the instance ID as `id` and the
+exposed parameter UUID as `key`.
+
+### Import existing shows
+
+Choose **Export Patch Show…** in the show picker to create a separate show with
+built-in effect clips converted to Patch instances. The copy retains the clip
+IDs, selections, original settings and media. The inspector lists controls
+that need review. Open the exported show from the picker.
 
 ## Client dials and exposed parameters
 
@@ -439,9 +436,12 @@ const {grid} = await api('/grid');
 const first = grid.columns[0].id;
 const second = grid.columns[1]?.id || (await api('/grid', {action:'add_column'})).result.id;
 const {result: row} = await api('/grid', {action:'add_row', name:'Base'});
-await api('/grid', {action:'put_clip', row:row.id, column:first,
-  effect:'solid_color', params:{color:'#ff8000'}});
-await api('/grid', {action:'put_clip', row:row.id, column:second, effect:'gradient'});
+const {subpatches} = await api('/library/subpatches');
+for (const [name,column] of [['Solid Color',first],['Gradient',second]]) {
+  const template = subpatches.find(item => item.bundled && item.name === name);
+  await api('/grid', {action:'put_clip', row:row.id, column, subpatchID:template.id,
+    outputID:template.outputs.find(port => port.composeType === 'video').id});
+}
 await api('/grid', {action:'launch_clip', row:row.id, column:first, bus:'out1'});
 await api('/grid', {action:'launch_clip', row:row.id, column:second, bus:'out2'});
 await api('/grid', {action:'start_out', bus:'out1'});
@@ -563,7 +563,7 @@ replace outputs; PUT /api/v1/outputs {"count":N} chooses the active count.
 | POST | /api/v1/grid | One grid action from the table above; returns updated grid, revision and result |
 | GET | /api/v1/effects/{name} | One effect/filter, including its parameter schema |
 | GET | /api/v1/effects | Live catalog with kind, adjustment/vector/exclusive flags, parameters and blend modes |
-| GET | /api/v1/effects/{name}/wasm | Download current WASM for a built-in/uploaded vector effect |
+| GET | /api/v1/effects/{name}/wasm | Download WASM for an uploaded vector effect |
 | GET | /api/v1/animations/{id} | Manifest, stable identity, revision, module URL and timestamps |
 | GET | /api/v1/animations/{id}/wasm | Download uploaded effect's current WASM |
 | PUT | /api/v1/animations/{id} | `{revision,manifest,wasmBase64}`; replace in place, update loaded instances (200) |
@@ -584,25 +584,13 @@ Output actions (JSON). For saved clip slots and shared rows, use `/grid` above:
 
 Layer and surface blend modes include `subtract`: `max(0, destination - source × alpha × opacity)`. A white-on-black Syphon visualization above a solid-color layer cuts black shapes into that color. Black pixels leave the base unchanged. Set the shared row with `{action:"set_row", row, blend:"subtract"}` or use `set_layer` / `set_clip`; the UI exposes the same mode.
 
-`laser_text` is a vector effect with `content`, `font`, `color`, `line_width`,
-`glow_width`, `brightness`, `size`, `x`, `y`, `pulse`, and `speed` parameters.
-It outlines the bundled fonts with a bright core and colored glow. Text supports
-up to 256 characters and newlines (including literal `\n`); longer content is
-truncated for rendering. Long names and multiple lines automatically fit the
-canvas at the default centered position. `pulse: 0` gives steady text; `speed`
-sets pulse cycles per second. All controls are available through the effect API.
-
-`cube` and `vector_cube` accept `pose_x`, `pose_y`, and `pose_z` in degrees
-(-180 to 180), applied in X, then Y, then Z order. Set `speed: 0` for a fixed
-pose. The orientation widget writes these four parameters together through
-`/grid` `set_clip`; `rotate_x/y/z` remain the automatic rotation rates.
+Laser Text and Vector Cube are Patch templates. Use their Video output in
+Compose and their Path output for vector routing in Patch.
 
 ```json
 {"action":"load","animationId":"ID_FROM_UPLOAD","params":{"speed":1}}
-{"action":"load","effect":"vector_cube","params":{"speed":1}}
 {"action":"params","params":{"speed":0.5}}
 {"action":"params","layerId":"LAYER_ID_FROM_STATE","params":{"speed":0.5}}
-{"action":"add_layer","effect":"color_adjust","params":{"exposure":-0.5}}
 {"action":"set_layer","layerId":123,"opacity":0.5,"blend":"screen","enabled":true}
 {"action":"move_layer","layerId":123,"dir":-1}
 {"action":"remove_layer","layerId":123}
@@ -828,7 +816,7 @@ effect while keeping its identity; versioned module URLs prevent stale cache reu
 ## Read and replace an uploaded effect
 
 Use `GET /api/v1/effects/{name}/wasm` to download an effect's current raw WASM
-(`application/wasm`). This works for built-in vector effects and uploaded effects;
+(`application/wasm`). This route serves uploaded vector effects;
 raster effects have no WASM and return 404. Effect detail/catalog entries advertise
 `wasm`, and uploaded effects also advertise `animationId` and `animation`.
 WASM is compiled code; keep the original AssemblyScript sources locally for edits.
@@ -1062,28 +1050,11 @@ effects can add a content kind without changing composer output routing.
 
 ### Surface collection effects
 
-`triangulate_faces`, `glow_faces`, and `flash_faces` are typed clips with
-`collectionGeometry: "faces"`. Create, launch, reorder, blend and edit them
-through the usual grid API. A planar collection receiving that Out evaluates
-the complete layer stack at its destination. Other content still repeats or
-spans normally; unsupported destinations skip these layers without replacing
-the ordinary Out video. Projector NDI includes the rendered effects.
-
-`sphere_gimbal` is a `collectionGeometry: "boxes"` effect. It treats the box
-surface as a sphere direction map and draws sharp, single-color trails around
-one equator. `trails` controls the number of equally spaced trails, `speed` is
-revolutions per second (0–60), `tail` is a fraction of the orbit, and `width`
-sets the line width. `fade_start` sets the point in the tail where dimming begins;
-`tail_fade` sets its strength (0 keeps a solid tail, 1 fades to black). `spread`
-(0–0.25) offsets each trail to a stable,
-parallel path on either side of the equator. The speed slider uses an
-exponential scale for finer control at low speeds while preserving zero and
-the 60 rev/s maximum. `pose_x/y/z` orient
-the gimbal in degrees; the Composer orientation widget edits these values.
-`rotate_x/y/z` are optional degrees per second and default to zero. `brightness`
-and `color` set the laser line. All
-parameters are available through `/api/v1/effects/sphere_gimbal` and the usual
-grid or output `params` action.
+Triangulate Faces, Glow Faces, Flash Faces, Box Waterfall, Sphere Gimbal and
+Box Edges expose a Collection output. Place it on a grid row and launch the
+clip on the Out feeding the mapped collection. Trace templates expose a Trace
+output for mapped paths and fixtures. Inspect each placed instance's exposed
+controls via Patch.
 
 **Triangulate Faces** connects face centers with a Delaunay graph in the shared
 plane. `line_ends: "edges"` clips lines and their halos against every face;
@@ -1112,10 +1083,10 @@ width is a fraction of a pulse cycle. Time follows the Out's clock.
 center to the card edges. It is a separate clip, with independent opacity and
 blend mode. Center circles are superseded by this face-fill effect.
 
-**Flash Faces** (`flash_faces`, `collectionGeometry: "faces"`) fills each face
+**Flash Faces** fills each face
 independently on planar, box, and point collections. Launch it on the Out feeding
 the collection; ordinary video destinations skip it. Edit its parameters through
-the usual clip/layer API; the same schema drives the UI.
+the exposed Patch parameters in Compose, Patch or the API.
 
 - `pattern`: `alternate` rotates colors across face order; `chase` lights one face
   at a time; `shuffle` picks new colors together; `scatter` gives faces independent
@@ -1412,21 +1383,15 @@ traces use one seed across the whole path. Linking shares controls, not seeds.
 Set `jitter`, `burst`, `crackle`, `forks`, and `top_spray` to zero for identical
 motion on destinations with identical routing. All these controls accept zero.
 
-Lorenz `rotation` is now a nonnegative speed (0–0.8); zero stops rotation.
-`rotation_direction` is `forward` or `reverse`. Saved negative rotation speeds
-load as positive speeds with reverse direction.
+### Vector art
 
-### Slime Mold
-
-`slime_mold` is a seeded line network rendered through the native graphics
-pipeline. Parameters: `density` (80–580), `branching` (radial growth, 0–1),
-`x`/`y` (origin, 0–1), `line_width` (0.5–5), `color`, `seed` (0–999999),
-`pulse` (0–1), `speed` (0–1), and `pulse_length` (0.01–0.3).
-The default is static. Pulses travel outward along connected branch paths.
-The UI's Reset mold button changes `seed`; API clients do the same using
-`set_clip` with `params: {seed: ...}`. Identical geometry parameters reproduce
-identical shapes. Geometry rebuilds only when seed, density, radial growth,
-origin, or aspect ratio changes. Ordinary clip blending and A/B routing apply.
+Compose lists Vector Cube, Laser Text, Lightning Cell Grid, Vector Scan Lines,
+Lorenz Attractor and Slime Mold under Vector Art. Each bundled Patch template
+exposes a Video output and a Vector Path output. Select Video for a Compose
+clip or connect Path to Voltage Encoder in Patch. The Patch control API exposes
+the node's parameter definitions, including color, speed, seed and ranges.
+For Slime Mold, changing `seed` regenerates the branching geometry. Laser Text
+uses the node's `text` property.
 
 Lightning Pulses speed supports 0.05–10 trace lengths/second. `single_color`
 (default false) uses `glow` for the entire pulse, bypassing the separate `core`
@@ -1707,6 +1672,32 @@ The crossfader hook uses existing grid `set_fader_sync`; MIDI clock uses
 `midi_clock_sync`. Built-in enable flags and explicit mappings persist with VJ.
 
 ### Typed embedded Patch sources
+
+The Compose library shares its favorites and saved subpatch catalog with Patch.
+`GET /api/v1/library/favorites` returns `favorites`. Use
+`POST /api/v1/library/favorites` with `{kind,id,name,pinned}` to pin or
+remove an entry. Supported kinds are `source`, `patchOutput`, `media`,
+`composeEffect`, `patchNode` and `subpatch`. NDI favorites use `ndi:<name>`,
+cameras use `usb_webcam:<device unique ID>`, and Syphon favorites use
+`syphon:<compact JSON>` with sorted `app` and `name` keys and a `uuid` for
+duplicate streams.
+
+`GET /api/v1/library/subpatches` returns saved templates with named, typed
+outputs. Use a template's `id` and an output's `id` as `subpatchID` and
+`outputID` in `POST /api/v1/grid`, together with the destination `row` and
+`column`. Use `action: "put_clip"` for video, collection and trace outputs.
+For a palette or control output, use `action: "set_clip"` and set
+`parameter` to the receiving clip's parameter key. The response includes
+`subpatch.id`, `subpatch.source` and `subpatch.type`. The native macOS
+host creates a distinct Patch instance for each library placement. Copying an
+existing clip preserves its current published-output binding.
+Use `POST /api/v1/grid` with `{action:"make_independent",row,column}` to
+give a Patch-backed clip its own copy of the current component and its exposed
+parameter values. The clip keeps its identity, playback settings and mix.
+A failed placement leaves its original binding in place. Templates with a
+`processingInput` and a compatible video effect chain produce `patch_adjustment`
+clips. Use `put_clip` on a separate layer above the video source. The
+`processingInput` receives the current composite from that bank.
 
 `GET /api/v1/sources/patch` exposes published video, collection, palette,
 control and trace outputs. Store the returned `id` verbatim in a VJ clip or

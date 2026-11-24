@@ -42,7 +42,7 @@ final class Workspace: ObservableObject {
         finishPendingGesture()
         dismissLibraryPreview()
         var temporary = graph
-        var node = Node(kind:entry.kind); node.fieldParameters = entry.fieldParameters; node.file = entry.file?.path; node.controlStyle = entry.controlStyle; node.name = entry.title
+        var node = Node(kind:entry.kind); node.configureShaderParameters(entry.fieldParameters); node.file = entry.file?.path; node.controlStyle = entry.controlStyle; node.name = entry.title
         // Browsing an output must not open windows, publish streams, or start recording.
         if node.kind.isOutput || node.kind == .webcam || node.kind == .microphone || node.kind == .audioInput { node.enabled = false }
         let selectedNode = graph.previewNode(selected)
@@ -96,18 +96,57 @@ final class Workspace: ObservableObject {
     func instantiateSubpatch(_ template: SubpatchTemplate, at position: Position, includeMIDI: Bool, enableOutputs: Bool = false) {
         edit("Insert Subpatch") { graph in selected = try graph.instantiate(template,at:position,includeMIDI:includeMIDI,enableOutputs:enableOutputs) }
     }
+    @discardableResult func insertLibrarySubpatch(_ id: String, at position: Position) throws -> UUID {
+        var next = graph
+        let group = try next.instantiate(PatchLibrary.template(id),at:position,includeMIDI:false)
+        try apply(next,action:"Insert Subpatch")
+        selected = group
+        return group
+    }
+
+    private var pendingLibraryInsertion: (id: UUID, before: HistoryState, after: Graph)?
+    func stageLibraryOutput(_ template: SubpatchTemplate, outputID: UUID, inputSource: String?, copyInputs: Bool) throws -> [String:Any] {
+        guard pendingLibraryInsertion == nil else { throw GraphError("Another subpatch insertion is pending") }
+        finishPendingGesture()
+        let before = historyState
+        var next = graph
+        let origin = Position((next.nodes.map { $0.position.x + $0.canvasWidth }.max() ?? 0) + 64,next.nodes.map { $0.position.y }.min() ?? 0)
+        let instance = try next.instantiate(template,at:origin,includeMIDI:false)
+        if copyInputs { try next.restoreIncomingBindings(from:template.component.id,to:instance) }
+        let output = try next.libraryOutput(instance,outputID:outputID,inputSource:inputSource)
+        try apply(next,action:"Insert Subpatch",registerUndo:false)
+        pendingLibraryInsertion = (instance,before,graph)
+        return output
+    }
+    func commitLibraryInsertion(_ id: UUID) {
+        guard let pending = pendingLibraryInsertion,pending.id == id else { return }
+        pendingLibraryInsertion = nil
+        registerHistory(pending.before,action:"Insert Subpatch")
+    }
+    func discardLibraryInsertion(_ id: UUID) throws {
+        guard let pending = pendingLibraryInsertion,pending.id == id else { throw GraphError("Unknown pending subpatch insertion") }
+        guard graph == pending.after else {
+            commitLibraryInsertion(id)
+            throw GraphError("The graph changed after insertion")
+        }
+        try apply(pending.before.graph,registerUndo:false)
+        pendingLibraryInsertion = nil
+    }
+
     func exportSubpatch(_ id: UUID) {
         do {
             let template = try graph.subpatchTemplate(id)
-            let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.directoryURL = Self.projectsDirectory
+            try FileManager.default.createDirectory(at:PatchLibrary.subpatchDirectory,withIntermediateDirectories:true)
+            let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.directoryURL = PatchLibrary.subpatchDirectory
             panel.nameFieldStringValue = template.component.name+".subpatch.json"
             guard panel.runModal() == .OK, let url = panel.url else { return }
             let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]
             try encoder.encode(template).write(to:url,options:.atomic)
+            PatchLibrary.shared.refresh()
         } catch { message = error.localizedDescription }
     }
     func importSubpatch(at position: Position) {
-        let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]; panel.directoryURL = Self.projectsDirectory
+        let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]; panel.directoryURL = PatchLibrary.subpatchDirectory
         let midi = NSButton(checkboxWithTitle:"Include MIDI mappings",target:nil,action:nil)
         let outputs = NSButton(checkboxWithTitle:"Activate devices and outputs",target:nil,action:nil)
         let options = NSStackView(views:[outputs,midi]); options.orientation = .vertical; options.alignment = .leading
@@ -233,7 +272,7 @@ final class Workspace: ObservableObject {
     }
     func addUserNode(_ entry: CatalogNode, at position: Position) {
         var node = libraryCatalogID == entry.id ? (libraryPreviewNode ?? Node(kind:entry.kind)) : Node(kind:entry.kind)
-        node.fieldParameters = entry.fieldParameters; node.position = position; node.file = entry.file?.path; node.controlStyle = entry.controlStyle
+        node.configureShaderParameters(entry.fieldParameters); node.position = position; node.file = entry.file?.path; node.controlStyle = entry.controlStyle
         if libraryCatalogID != entry.id { node.name = entry.title }
         edit("Add \(entry.title)") { $0.nodes.append(node); selected = node.id }
     }

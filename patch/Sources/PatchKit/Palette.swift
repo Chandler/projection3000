@@ -14,14 +14,14 @@ final class PaletteController: NSObject, NSTableViewDataSource, NSTableViewDeleg
         panel.title = "Add Node"; panel.titleVisibility = .hidden; panel.titlebarAppearsTransparent = true; panel.isFloatingPanel = true; panel.level = .floating; panel.appearance = NSAppearance(named:.darkAqua)
         panel.isReleasedWhenClosed = false; panel.backgroundColor = .patchPanel
         let content = NSView(); panel.contentView = content
-        search.placeholderString = "Search nodes…"; search.font = .systemFont(ofSize:18); search.focusRingType = .none; search.delegate = self
+        search.placeholderString = "Search nodes…"; search.font = .systemFont(ofSize:EditorTypography.title); search.focusRingType = .none; search.delegate = self
         search.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(search)
         let column = NSTableColumn(identifier:.init("node")); column.width = 390; table.addTableColumn(column)
         table.headerView = nil; table.rowHeight = 34; table.backgroundColor = .patchPanel; table.delegate = self; table.dataSource = self
         table.target = self; table.action = #selector(acceptClickedRow); table.selectionHighlightStyle = .regular
         let scroll = NSScrollView(); scroll.documentView = table; scroll.hasVerticalScroller = true; scroll.drawsBackground = false
         scroll.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(scroll)
-        let hint = NSTextField(labelWithString:"↑↓ Select     Click / ↵ Add     Esc Close"); hint.textColor = .patchMuted; hint.font = .monospacedSystemFont(ofSize:10,weight:.regular); hint.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(hint)
+        let hint = NSTextField(labelWithString:"↑↓ Select     Click / ↵ Add     Esc Close"); hint.textColor = .patchMuted; hint.font = .systemFont(ofSize:EditorTypography.caption); hint.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(hint)
         NSLayoutConstraint.activate([
             search.topAnchor.constraint(equalTo:content.topAnchor,constant:28), search.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:16),search.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-16),search.heightAnchor.constraint(equalToConstant:34),
             scroll.topAnchor.constraint(equalTo:search.bottomAnchor,constant:12),scroll.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:10),scroll.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-10),scroll.bottomAnchor.constraint(equalTo:hint.topAnchor,constant:-8),
@@ -37,8 +37,8 @@ final class PaletteController: NSObject, NSTableViewDataSource, NSTableViewDeleg
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let node = results[row]
         let cell = NSTableCellView(); let label = NSTextField(labelWithString:node.title)
-        label.font = .systemFont(ofSize:13,weight:.medium); label.textColor = .labelColor; label.frame = .init(x:12,y:7,width:230,height:20); cell.addSubview(label)
-        let type = NSTextField(labelWithString:node.category); type.font = .monospacedSystemFont(ofSize:9,weight:.medium); type.textColor = .node(node.kind); type.frame = .init(x:287,y:9,width:85,height:16); type.alignment = .right; cell.addSubview(type)
+        label.font = .systemFont(ofSize:EditorTypography.body,weight:.medium); label.textColor = .labelColor; label.frame = .init(x:12,y:7,width:230,height:20); cell.addSubview(label)
+        let type = NSTextField(labelWithString:node.category); type.font = .systemFont(ofSize:EditorTypography.caption,weight:.medium); type.textColor = .node(node.kind); type.frame = .init(x:287,y:9,width:85,height:16); type.alignment = .right; cell.addSubview(type)
         return cell
     }
     func controlTextDidChange(_ obj: Notification) {

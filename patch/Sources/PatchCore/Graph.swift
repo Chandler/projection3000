@@ -5,7 +5,9 @@ public enum PortType: String, Codable, CaseIterable, Sendable { case rgbProfiles
     public func accepts(_ source: PortType?) -> Bool { guard let source else { return false }; return self == source || (self == .visual && (source == .video || source == .collection)) }
 }
 public enum NodeKind: String, Codable, CaseIterable, Sendable {
-    case fieldShader, fieldRender, fieldMix, flashCells, profileEncoder, profileAnalog, profileDecoder, rasterSynth, metroSequencer, loopmother, midiIn, midiFilter, midiTransform, midiMonitor, midiMerge, audioPlugin, chromaEncoder, chromaDecoder, arpeggiator, midiOut, vectorShape, vectorText, fluidShape, voltageEncoder, voltageVisualizer, voltageFluid, oscilloscope, audioInput, projector, posterText, posterComposer, videoCollection, apc40, glowFaces, powerGlitch, liveStream, lightningPulses, graphInkFlow, graphParticles, graphPulse, graphClouds, graphCloudParticles, flashFaces, surfaceGate, publishPalette, palette, videoPalette, paletteAdjust, meshGradient, ab, mux, layerMux, dotColors, flipDots, projectionDots, shaderEffect, cellularField, waterfallField, streakField, streakGlow, blockerField, ledMatrix, dataStream, pictureInPicture, channelSplit, channelColors, crop, yoloPose, poseRender, microphone, audioEnvelope, audioGain, audioMono, audioMix, audioFilter, audioEQ, audioOutput, lfo, noise, faceReplace, faceDetect, faceBoxes, scene, pattern, image, video, text, webcam, audio, waveform, audioVisualizer, lorenz, render, shader, dither, halftone, diffusion, modulation, crt, blend, color, window, syphon, ndi, ndiIn, record, recordAudio
+    case triangulateFaces, boxWaterfall, sphereGimbal, boxEdges, traceSnake, tracePulse, traceRainbow, traceSolid
+    case vectorCube, laserLettering, lightningCellGrid, vectorScanLines, vectorLorenz, slimeMold
+    case fieldShader, fieldRender, fieldMix, flashCells, profileEncoder, profileAnalog, profileDecoder, rasterSynth, metroSequencer, loopmother, midiIn, midiFilter, midiTransform, midiMonitor, midiMerge, audioPlugin, chromaEncoder, chromaDecoder, arpeggiator, midiOut, vectorShape, vectorText, fluidShape, voltageEncoder, voltageVisualizer, voltageFluid, oscilloscope, audioInput, projector, posterText, posterComposer, videoCollection, apc40, glowFaces, powerGlitch, liveStream, lightningPulses, graphInkFlow, graphParticles, graphPulse, graphClouds, graphCloudParticles, flashFaces, surfaceGate, publishPalette, palette, videoPalette, paletteAdjust, meshGradient, ab, mux, layerMux, dotColors, flipDots, projectionDots, shaderEffect, cellularField, waterfallField, streakField, streakGlow, blockerField, ledMatrix, dataStream, pictureInPicture, channelSplit, channelColors, crop, yoloPose, poseRender, microphone, audioEnvelope, audioGain, audioMono, audioMix, audioFilter, audioEQ, audioOutput, lfo, noise, faceReplace, faceDetect, faceBoxes, scene, pattern, image, video, text, webcam, audio, waveform, audioVisualizer, lorenz, render, shader, dither, halftone, diffusion, modulation, crt, blend, color, window, syphon, ndi, ndiIn, syphonIn, record, recordAudio
     public var title: String {
         switch self {
         case .profileEncoder: return "RGB Profile Encoder"
@@ -25,6 +27,12 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
         case .midiMerge: return "MIDI Merge"
         case .arpeggiator: return "Arpeggiator"
         case .midiOut: return "MIDI Out"
+        case .vectorCube: return "Vector Cube"
+        case .laserLettering: return "Laser Text"
+        case .lightningCellGrid: return "Lightning Cell Grid"
+        case .vectorScanLines: return "Vector Scan Lines"
+        case .vectorLorenz: return "Lorenz Attractor"
+        case .slimeMold: return "Slime Mold"
         case .vectorShape: return "Vector Shape"
         case .vectorText: return "Vector Text"
         case .voltageEncoder: return "Voltage Encoder"
@@ -37,6 +45,14 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
         case .projector: return "Projector Out"
         case .powerGlitch: return "Power Glitch"
         case .liveStream: return "Live Stream"
+        case .triangulateFaces: return "Triangulate Faces"
+        case .boxWaterfall: return "Box Waterfall"
+        case .sphereGimbal: return "Sphere Gimbal"
+        case .boxEdges: return "Box Edges"
+        case .traceSnake: return "Snake"
+        case .tracePulse: return "Pulse"
+        case .traceRainbow: return "Rainbow Flow"
+        case .traceSolid: return "Solid"
         case .lightningPulses: return "Lightning Pulses"
         case .graphInkFlow: return "Graph Ink Flow"
         case .graphParticles: return "Graph Particles"
@@ -115,20 +131,24 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
         case .syphon: return "Syphon Out"
         case .ndi: return "NDI Out"
         case .ndiIn: return "NDI In"
+        case .syphonIn: return "Syphon In"
         }
     }
     public var previewKind: NodePreviewKind {
         switch self {
+        case .traceSnake,.tracePulse,.traceRainbow,.traceSolid: return .video
+        case .triangulateFaces,.boxWaterfall,.sphereGimbal,.boxEdges: return .video
         case .flashCells, .cellularField, .waterfallField, .streakField, .blockerField, .dataStream: return .video
         case .metroSequencer, .midiIn, .midiFilter, .midiTransform, .midiMonitor, .midiMerge, .arpeggiator, .midiOut: return .empty
         case .apc40, .lfo, .noise, .audioEnvelope: return .control
         case .publishPalette, .palette, .videoPalette, .paletteAdjust: return .palette
+        case .vectorCube, .laserLettering, .lightningCellGrid, .vectorScanLines, .vectorLorenz, .slimeMold: return .video
         case .vectorShape, .vectorText, .fluidShape, .lorenz: return .geometry
         case .loopmother, .chromaEncoder, .audioInput, .voltageEncoder, .microphone, .audio, .audioGain, .audioMono, .audioMix, .audioPlugin, .audioFilter, .audioEQ, .audioOutput, .recordAudio: return .audio
-        case .fieldShader, .fieldRender, .fieldMix, .profileEncoder, .profileAnalog, .profileDecoder, .rasterSynth, .chromaDecoder, .oscilloscope, .voltageVisualizer, .voltageFluid, .projector, .posterText, .posterComposer, .videoCollection, .glowFaces, .powerGlitch, .liveStream, .lightningPulses, .graphInkFlow, .graphParticles, .graphPulse, .graphClouds, .graphCloudParticles, .flashFaces, .surfaceGate, .meshGradient, .ab, .mux, .layerMux, .dotColors, .flipDots, .projectionDots, .shaderEffect, .ledMatrix, .pictureInPicture, .channelSplit, .channelColors, .crop, .yoloPose, .poseRender, .faceReplace, .faceDetect, .faceBoxes, .scene, .pattern, .image, .video, .text, .webcam, .waveform, .audioVisualizer, .render, .shader, .dither, .halftone, .diffusion, .modulation, .crt, .blend, .color, .window, .syphon, .ndi, .ndiIn, .record, .streakGlow: return .video
+        case .syphonIn, .fieldShader, .fieldRender, .fieldMix, .profileEncoder, .profileAnalog, .profileDecoder, .rasterSynth, .chromaDecoder, .oscilloscope, .voltageVisualizer, .voltageFluid, .projector, .posterText, .posterComposer, .videoCollection, .glowFaces, .powerGlitch, .liveStream, .lightningPulses, .graphInkFlow, .graphParticles, .graphPulse, .graphClouds, .graphCloudParticles, .flashFaces, .surfaceGate, .meshGradient, .ab, .mux, .layerMux, .dotColors, .flipDots, .projectionDots, .shaderEffect, .ledMatrix, .pictureInPicture, .channelSplit, .channelColors, .crop, .yoloPose, .poseRender, .faceReplace, .faceDetect, .faceBoxes, .scene, .pattern, .image, .video, .text, .webcam, .waveform, .audioVisualizer, .render, .shader, .dither, .halftone, .diffusion, .modulation, .crt, .blend, .color, .window, .syphon, .ndi, .ndiIn, .record, .streakGlow: return .video
         }
     }
-    public var category: String { if self == .fieldShader { return "USER GENERATED" }; if isMIDINode { return "MIDI" }; if self == .posterText || self == .posterComposer { return "POSTER" }; if self == .vectorShape || self == .vectorText || self == .fluidShape { return "GEOMETRY" }; if self == .voltageVisualizer || self == .voltageFluid { return "RENDER" }; if self == .lightningPulses { return "TRACE" }; if self == .glowFaces || self == .graphInkFlow || self == .graphParticles || self == .graphPulse || self == .graphClouds || self == .graphCloudParticles || self == .flashFaces || self == .surfaceGate || self == .videoCollection || self == .layerMux { return "COLLECTION" }; if self == .apc40 || self == .lfo || self == .noise { return "CONTROL" }; if self == .meshGradient || self == .dotColors || self == .flipDots || self == .projectionDots || self == .scene || self == .dataStream || self == .blockerField || self == .streakField || self == .waterfallField || self == .cellularField || self == .streakGlow { return "USER GENERATED" }; if self == .videoPalette || self == .faceDetect || self == .yoloPose { return "ANALYSIS" }; return (isAudioNode || self == .recordAudio || self == .rasterSynth || self == .waveform || self == .audioVisualizer || self == .oscilloscope || self == .audioEnvelope) ? "AUDIO" : self == .lorenz ? "GEOMETRY" : (self == .render || self == .poseRender ? "RENDER" : (isOutput ? "OUTPUT" : (inputs.isEmpty ? "SOURCE" : "EFFECT"))) }
+    public var category: String { if vectorArtModule != nil { return "VECTOR ART" }; if self == .fieldShader { return "USER GENERATED" }; if isMIDINode { return "MIDI" }; if self == .posterText || self == .posterComposer { return "POSTER" }; if self == .vectorShape || self == .vectorText || self == .fluidShape { return "GEOMETRY" }; if self == .voltageVisualizer || self == .voltageFluid { return "RENDER" }; if self == .lightningPulses || isMappedTrace { return "TRACE" }; if isMappedSurface { return "COLLECTION" }; if self == .glowFaces || self == .graphInkFlow || self == .graphParticles || self == .graphPulse || self == .graphClouds || self == .graphCloudParticles || self == .flashFaces || self == .surfaceGate || self == .videoCollection || self == .layerMux { return "COLLECTION" }; if self == .apc40 || self == .lfo || self == .noise { return "CONTROL" }; if self == .meshGradient || self == .dotColors || self == .flipDots || self == .projectionDots || self == .scene || self == .dataStream || self == .blockerField || self == .streakField || self == .waterfallField || self == .cellularField || self == .streakGlow { return "USER GENERATED" }; if self == .videoPalette || self == .faceDetect || self == .yoloPose { return "ANALYSIS" }; return (isAudioNode || self == .recordAudio || self == .rasterSynth || self == .waveform || self == .audioVisualizer || self == .oscilloscope || self == .audioEnvelope) ? "AUDIO" : self == .lorenz ? "GEOMETRY" : (self == .render || self == .poseRender ? "RENDER" : (isOutput ? "OUTPUT" : (inputs.isEmpty ? "SOURCE" : "EFFECT"))) }
     public var isOutput: Bool { [.midiOut, .projector, .publishPalette, .window, .syphon, .ndi, .record, .recordAudio, .audioOutput].contains(self) }
     public var isAudioNode: Bool { [.loopmother,.chromaEncoder,.audioInput,.voltageEncoder,.microphone,.audio,.audioGain,.audioMono,.audioMix,.audioPlugin,.audioFilter,.audioEQ,.audioOutput].contains(self) }
     /// Separate audio outputs carry the chosen channel as mono in both slots.
@@ -165,6 +185,7 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
         case .graphPulse: return CollectionStyle.graphParameters
         case .graphClouds: return CollectionStyle.cloudParameters
         case .graphCloudParticles: return CollectionStyle.cloudParticleParameters
+        case .triangulateFaces,.boxWaterfall,.sphereGimbal,.boxEdges,.traceSnake,.tracePulse,.traceRainbow,.traceSolid: return mappedParameters
         case .glowFaces: return CollectionStyle.glowParameters
         case .flashFaces: return CollectionStyle.parameters + CollectionStyle.colorParameters
         case .surfaceGate: return CollectionStyle.parameters
@@ -180,6 +201,7 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
         case .metroSequencer: return MetroStyle.parameters
         case .arpeggiator: return ArpeggiatorStyle.parameters
         case .midiOut: return ArpeggiatorStyle.outputParameters
+        case .vectorCube, .laserLettering, .lightningCellGrid, .vectorScanLines, .vectorLorenz, .slimeMold: return VectorArtStyle.parameters(self)
         case .vectorShape: return AnalogVectorStyle.shapeParameters
         case .vectorText: return AnalogVectorStyle.textParameters
         case .voltageEncoder: return AnalogVectorStyle.encoderParameters
@@ -283,7 +305,14 @@ public enum NodeKind: String, Codable, CaseIterable, Sendable {
 }
 public struct Position: Codable, Equatable, Sendable { public var x: Double; public var y: Double; public init(_ x: Double, _ y: Double) { self.x = x; self.y = y } }
 public struct Node: Codable, Identifiable, Equatable, Sendable {
+    public var mappedFaceIDs: [String:String]?
     public var fieldParameters: [ParameterSpec]?
+    public mutating func configureShaderParameters(_ specs: [ParameterSpec]?) {
+        guard fieldParameters != specs else { return }
+        fieldParameters = specs
+        // Configuring a new shader replaces the generic node defaults with its declaration.
+        if specs != nil { parameters = [:] }
+    }
     public var id: UUID
     public var kind: NodeKind
     public var name: String
@@ -303,7 +332,7 @@ public struct Node: Codable, Identifiable, Equatable, Sendable {
     public var seekRevision: UUID?
     public var enabled: Bool
     public init(kind: NodeKind, position: Position = .init(0, 0), id: UUID = UUID()) {
-        self.id = id; self.kind = kind; text = kind == .vectorText ? "PATCH" : kind == .text ? "Text" : kind == .flipDots ? "HELLO\nWORLD\nPATCH" : nil; name = kind.title; self.position = position
+        self.id = id; self.kind = kind; text = kind == .laserLettering ? "YOUR NAME" : kind == .vectorText ? "PATCH" : kind == .text ? "Text" : kind == .flipDots ? "HELLO\nWORLD\nPATCH" : nil; name = kind.title; self.position = position
         palette = kind == .palette ? PaletteStyle.defaultPalette : nil
         parameters = Dictionary(uniqueKeysWithValues: kind.parameters.map { ($0.key, $0.initial) }); enabled = true
     }
@@ -387,6 +416,9 @@ public struct Graph: Codable, Equatable, Sendable {
             components = groups.compactMap { old in
                 var group = old
                 group.members.removeAll(where:removing.contains)
+                if let main = group.interface?.processingInput, group.interface?.ports.contains(where:{ $0.id == main && removing.contains($0.node) }) == true {
+                    group.interface?.processingInput = nil
+                }
                 group.interface?.ports.removeAll { removing.contains($0.node) }
                 group.interface?.parameters.removeAll { removing.contains($0.node) }
                 if let preview = group.interface?.preview, removing.contains(preview) { group.interface?.preview = nil }
@@ -490,8 +522,11 @@ public struct Graph: Codable, Equatable, Sendable {
             guard occupied.insert("\(edge.target):\(edge.input)").inserted else { throw GraphError("An input can have only one cable.") }
         }
         for n in nodes {
+            if let ids = n.mappedFaceIDs {
+                guard n.kind == .triangulateFaces, Set(ids.keys).isSubset(of:["start_face","end_face"]), ids.values.allSatisfy({ $0.utf8.count <= 1024 }) else { throw GraphError("Invalid mapped face identifiers") }
+            }
             if let parameters = n.fieldParameters {
-                guard n.kind == .fieldShader else { throw GraphError("Custom field parameters require a Field Shader") }
+                guard n.kind == .fieldShader || n.kind == .shaderEffect && n.controlStyle == nil else { throw GraphError("Custom parameters require a Field Shader or a Shader Effect without a built-in control style") }
                 try ParameterSpec.validateShaderParameters(parameters)
             }
             for (key, publication) in n.publications ?? [:] {

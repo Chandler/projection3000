@@ -1,0 +1,126 @@
+{
+  "version": 2,
+  "component": {
+    "id": "C1FF8FB8-0EF1-50DF-B1BE-46E6F64C3F20",
+    "name": "Solid Color",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "84C03631-5F04-5877-BDE6-8D2660A480FE",
+      "4E4B86B2-60D0-54ED-92E3-FDEB89A0C13D"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "1418CB98-16F7-5B6C-833D-5CADE48D2155",
+          "node": "4E4B86B2-60D0-54ED-92E3-FDEB89A0C13D",
+          "name": "Video",
+          "key": "Video",
+          "output": true,
+          "type": "video"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "BE654C0D-F4F4-5A3C-8AB3-83791903C188",
+          "name": "Color",
+          "node": "84C03631-5F04-5877-BDE6-8D2660A480FE",
+          "key": "start"
+        }
+      ],
+      "preview": "4E4B86B2-60D0-54ED-92E3-FDEB89A0C13D"
+    }
+  },
+  "nodes": [
+    {
+      "id": "84C03631-5F04-5877-BDE6-8D2660A480FE",
+      "kind": "fieldShader",
+      "name": "Color Ramp",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "amount": 0,
+        "start": 16777215
+      },
+      "enabled": true,
+      "file": "bundle:User Nodes/Composition/Color Ramp.metal",
+      "fieldParameters": [
+        {
+          "key": "start",
+          "title": "Start Color",
+          "min": 0,
+          "max": 16777215,
+          "initial": 2429513,
+          "step": 1,
+          "unit": "sRGB24",
+          "midi": false
+        },
+        {
+          "key": "end",
+          "title": "End Color",
+          "min": 0,
+          "max": 16777215,
+          "initial": 16347976,
+          "step": 1,
+          "unit": "sRGB24",
+          "midi": false
+        },
+        {
+          "key": "angle",
+          "title": "Angle",
+          "min": -180,
+          "max": 180,
+          "initial": 10,
+          "unit": "°"
+        },
+        {
+          "key": "width",
+          "title": "Width",
+          "min": 0.01,
+          "max": 4,
+          "initial": 1
+        },
+        {
+          "key": "shift",
+          "title": "Offset",
+          "min": -1,
+          "max": 1,
+          "initial": 0
+        },
+        {
+          "key": "amount",
+          "title": "Gradient Amount",
+          "min": 0,
+          "max": 1,
+          "initial": 1
+        }
+      ]
+    },
+    {
+      "id": "4E4B86B2-60D0-54ED-92E3-FDEB89A0C13D",
+      "kind": "fieldRender",
+      "name": "Render Field",
+      "position": {
+        "x": 275,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [
+    {
+      "id": "F3DDAE04-C274-5EBF-9D41-5256D7F962A4",
+      "source": "84C03631-5F04-5877-BDE6-8D2660A480FE",
+      "target": "4E4B86B2-60D0-54ED-92E3-FDEB89A0C13D",
+      "outputID": "Field",
+      "inputID": "Field"
+    }
+  ],
+  "midiMappings": []
+}

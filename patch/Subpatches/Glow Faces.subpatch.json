@@ -1,0 +1,77 @@
+{
+  "version": 2,
+  "component": {
+    "id": "6C5330B6-03F0-5685-8AA2-9728D5FE68AF",
+    "name": "Glow Faces",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "5293AC98-36F1-5FED-9FC3-E2AC1B7AD29B"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "98FFA39E-64C4-5311-AC11-D60FE4907CE6",
+          "node": "5293AC98-36F1-5FED-9FC3-E2AC1B7AD29B",
+          "name": "Palette",
+          "key": "Palette",
+          "output": false,
+          "type": "palette"
+        },
+        {
+          "id": "97659DED-95A1-5EC5-9480-FA27D4F20BCC",
+          "node": "5293AC98-36F1-5FED-9FC3-E2AC1B7AD29B",
+          "name": "Collection",
+          "key": "Collection",
+          "output": true,
+          "type": "collection"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "6ADC63C9-CF35-5C9D-9AF8-6BD6BB0C5B90",
+          "name": "Brightness",
+          "node": "5293AC98-36F1-5FED-9FC3-E2AC1B7AD29B",
+          "key": "brightness"
+        },
+        {
+          "id": "F7B0A89E-2C96-52A6-8148-A3AAA83C9550",
+          "name": "Center Glow",
+          "node": "5293AC98-36F1-5FED-9FC3-E2AC1B7AD29B",
+          "key": "center_glow"
+        },
+        {
+          "id": "9D971637-E4F7-536B-BAD4-2477A65184A1",
+          "name": "Falloff",
+          "node": "5293AC98-36F1-5FED-9FC3-E2AC1B7AD29B",
+          "key": "falloff"
+        },
+        {
+          "id": "EF1DD01F-7511-5065-80A4-8627655D26BF",
+          "name": "Color",
+          "node": "5293AC98-36F1-5FED-9FC3-E2AC1B7AD29B",
+          "key": "color"
+        }
+      ],
+      "preview": "5293AC98-36F1-5FED-9FC3-E2AC1B7AD29B"
+    }
+  },
+  "nodes": [
+    {
+      "id": "5293AC98-36F1-5FED-9FC3-E2AC1B7AD29B",
+      "kind": "glowFaces",
+      "name": "Glow Faces",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

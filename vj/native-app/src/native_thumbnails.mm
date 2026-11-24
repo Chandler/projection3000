@@ -29,22 +29,17 @@ constexpr int width=192,height=108;
 constexpr std::array<std::array<double,2>,3> phases={{{1.4,1.05},{2.2,1.4},{3.,1.75}}};
 std::string hash(const std::string& value){boost::uuids::detail::sha1 sha;sha.process_bytes(value.data(),value.size());boost::uuids::detail::sha1::digest_type words;sha.get_digest(words);std::ostringstream out;out<<std::hex<<std::setfill('0');for(auto word:words)out<<std::setw(sizeof(word)*2)<<uint32_t(word);return out.str();}
 NSImage* image(const std::vector<uint8_t>& rgb){if(rgb.size()!=width*height*3)return nil;auto rep=[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO isPlanar:NO colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:width*3 bitsPerPixel:24];if(!rep)return nil;std::memcpy(rep.bitmapData,rgb.data(),rgb.size());auto value=[[NSImage alloc] initWithSize:NSMakeSize(width,height)];[value addRepresentation:rep];return value;}
-std::vector<uint8_t> trace(const std::string& effect,const J& params){std::vector<uint8_t> rgb(width*height*3,0);for(int y=0;y<height;++y)for(int x=0;x<width;++x){const double px=(double(x)/(width-1)-.1)/.8,py=(double(y)/(height-1)-.15)/.7;if(px<0||px>1||py<0||py>1)continue;const std::array<double,4> edges={py,1-px,1-py,px};const auto edge=std::min_element(edges.begin(),edges.end())-edges.begin();if(edges[edge]>=.07)continue;const std::array<double,4> along={px,1+py,3-px,4-py};for(auto phase:phases){const auto color=vj::evaluateTrace(effect,along[edge]/4,phase[0],phase[1],params);for(int c=0;c<3;++c)rgb[(y*width+x)*3+c]=std::max(rgb[(y*width+x)*3+c],uint8_t(std::clamp(color[c],0.f,1.f)*255));}}return rgb;}
 #if __has_include("PatchTrace.h")
 std::vector<uint8_t> patchTracePoster(const J& recipe){
  vj::patch_trace::Recipe effect(recipe);std::vector<uint8_t> rgb(width*height*3,0);
  for(int y=0;y<height;++y)for(int x=0;x<width;++x){
   double px=(double(x)/(width-1)-.1)/.8,py=(double(y)/(height-1)-.15)/.7;if(px<0||px>1||py<0||py>1)continue;
   std::array<double,4> edges={py,1-px,1-py,px};auto edge=std::min_element(edges.begin(),edges.end())-edges.begin();if(edges[edge]>=.07)continue;
-  std::array<double,4> along={px,1+py,3-px,4-py};auto color=effect.sample(along[edge]/4,0);
+  std::array<double,4> along={px,1+py,3-px,4-py};auto color=effect.sample(along[edge]/4,0,effect.time*2);
   for(int c=0;c<3;c++)rgb[(y*width+x)*3+c]=uint8_t(std::clamp(color[c],0.f,1.f)*255);
  }return rgb;
 }
 #endif
-std::vector<uint8_t> boxEdges(const J& params){
- std::vector<uint8_t> rgb(width*height*3,0);const std::array<std::array<double,2>,7> raw={{{.18,.3},{.5,.13},{.82,.3},{.5,.48},{.18,.7},{.5,.88},{.82,.7}}};auto points=raw;for(auto& point:points){point[0]=std::nearbyint(point[0]*width);point[1]=std::nearbyint(point[1]*height);}const std::array<std::array<int,2>,9> edges={{{0,1},{1,2},{2,3},{3,0},{0,4},{4,5},{5,3},{5,6},{6,2}}};const auto color=std::stoul(params.value("color",std::string("#ffffff")).substr(1),nullptr,16);const double brightness=params.value("brightness",1.),radius=std::max(1.,std::nearbyint(params.value("thickness",3.)*height/180))*.5;
- for(int y=0;y<height;++y)for(int x=0;x<width;++x){double alpha=0;for(auto edge:edges){const auto a=points[edge[0]],b=points[edge[1]];const double dx=b[0]-a[0],dy=b[1]-a[1],t=std::clamp(((x-a[0])*dx+(y-a[1])*dy)/(dx*dx+dy*dy),0.,1.);const double distance=std::hypot(x-a[0]-t*dx,y-a[1]-t*dy);alpha=std::max(alpha,std::clamp(radius+.5-distance,0.,1.));}for(int c=0;c<3;++c)rgb[(y*width+x)*3+c]=uint8_t(((color>>(16-c*8))&255)*brightness*alpha);}return rgb;
-}
 J sampleGeometry(bool boxes=false){
  if(boxes){static const J geometry=[](){J project={{"rects",J::array()}};vj::requestMappingCollection(project,"POST","",{{"kind","boxes"},{"preset","stack"}});auto description=project["collections"][0];description["rects"]=project["rects"];return vj::collectionGeometry(description);}();return geometry;}
  J faces=J::array(),rects=J::array();for(int y=0;y<2;++y)for(int x=0;x<3;++x){auto id="sample-"+std::to_string(y*3+x);double l=.04+x*.32,t=.06+y*.46;J corners={{l,t},{l+.28,t},{l+.28,t+.38},{l,t+.38}};faces.push_back({{"id",id},{"rectId",id},{"name",id},{"planeCorners",corners}});rects.push_back({{"id",id},{"corners",corners},{"uvs",{{0,0},{1,0},{1,1},{0,1}}}});}return vj::collectionGeometry({{"kind","planar"},{"faces",faces},{"rects",rects}});
@@ -69,7 +64,7 @@ public:
 };
 class Renderer {
  fs::path root_;J catalog_;NSOpenGLContext* context_=nil;std::unique_ptr<NativeRenderGraph> graph_;std::unique_ptr<vj::VectorHost> vectors_;uint64_t revision_=0;std::function<bool()> cancelled_;
- void context(){if(context_&&graph_&&vectors_){[context_ makeCurrentContext];return;}if(context_){[context_ makeCurrentContext];vectors_.reset();graph_.reset();context_=nil;}NSOpenGLPixelFormatAttribute attributes[]={NSOpenGLPFAOpenGLProfile,NSOpenGLProfileVersion3_2Core,NSOpenGLPFAAccelerated,NSOpenGLPFAColorSize,24,0};auto format=[[NSOpenGLPixelFormat alloc] initWithAttributes:attributes];context_=[[NSOpenGLContext alloc] initWithFormat:format shareContext:nil];if(!context_)throw std::runtime_error("Thumbnail OpenGL context unavailable");[context_ makeCurrentContext];graph_=std::make_unique<NativeRenderGraph>([](const std::string&)->std::unique_ptr<LiveCapture>{throw std::runtime_error("Live capture is disabled in thumbnails");});vectors_=std::make_unique<vj::VectorHost>(vj::defaultVectorModuleRoot(),root_/"vector-modules");vectors_->install(*graph_);}
+ void context(){if(context_&&graph_&&vectors_){[context_ makeCurrentContext];return;}if(context_){[context_ makeCurrentContext];vectors_.reset();graph_.reset();context_=nil;}NSOpenGLPixelFormatAttribute attributes[]={NSOpenGLPFAOpenGLProfile,NSOpenGLProfileVersion3_2Core,NSOpenGLPFAAccelerated,NSOpenGLPFAColorSize,24,0};auto format=[[NSOpenGLPixelFormat alloc] initWithAttributes:attributes];context_=[[NSOpenGLContext alloc] initWithFormat:format shareContext:nil];if(!context_)throw std::runtime_error("Thumbnail OpenGL context unavailable");[context_ makeCurrentContext];graph_=std::make_unique<NativeRenderGraph>([](const std::string&)->std::unique_ptr<LiveCapture>{throw std::runtime_error("Live capture is disabled in thumbnails");});vectors_=std::make_unique<vj::VectorHost>(root_/"vector-modules");vectors_->install(*graph_);}
  fs::path cache(){auto path=root_/"thumbnail-cache";fs::create_directories(path);return path;}
  fs::path plate(){const auto path=cache()/"adjustment-plate-v1.png";if(fs::is_regular_file(path))return path;std::vector<uint8_t> rgb(width*height*3);for(int y=0;y<height;++y)for(int x=0;x<width;++x){double px=double(x)/(width-1),py=double(y)/(height-1);std::array<double,3> value={px,py,.45+.35*std::sin((px+py)*M_PI*5)};for(int c=0;c<3;++c)rgb[(y*width+x)*3+c]=(y%18==0||x%24==0)?255:uint8_t(value[c]*255);}auto bitmap=(NSBitmapImageRep*)image(rgb).representations.firstObject;auto data=[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}];if(![data writeToFile:[NSString stringWithUTF8String:path.c_str()] atomically:YES])throw std::runtime_error("Cannot cache thumbnail plate");return path;}
  fs::path poster(const std::string& file,const J& params){
@@ -86,7 +81,12 @@ public:
   #if __has_include("PatchTrace.h")
   if(effect=="patch_trace"){for(const auto& output:model->patchOutputs())if(output.value("type",std::string{})=="trace"&&output.value("id",std::string{})==params.value("source",std::string{})&&output.value("available",false))return image(patchTracePoster(output.value("recipe",J::object())));return nil;}
 #endif
-  auto contexts=clip.value("_thumbnailContexts",J::array());if(!effect.starts_with("trace_")&&effect!="patch_trace")contexts.erase(std::remove_if(contexts.begin(),contexts.end(),[&](const J& geometry){return geometry.value("traceOnly",false)||((effect=="box_waterfall"||effect=="sphere_gimbal")&&geometry.value("kind",std::string{})!="boxes");}),contexts.end());if(effect.starts_with("trace_"))return image(trace(effect,params));if(effect=="box_edges"&&contexts.empty())return image(boxEdges(params));if((spec.value("kind",std::string{})=="collection"||spec.value("collectionGeometry",J()).is_string())&&effect!="media_collection"&&contexts.empty())contexts.push_back(sampleGeometry(effect=="box_waterfall"||effect=="sphere_gimbal"));
+  auto contexts=clip.value("_thumbnailContexts",J::array());bool boxes=false;
+  if(effect=="patch_collection")for(const auto& output:model->patchOutputs())if(output.value("id",std::string{})==params.value("source",std::string{})){
+    const auto kind=output.value("recipe",J::object()).value("kind",std::string{});boxes=kind=="boxWaterfall"||kind=="sphereGimbal"||kind=="boxEdges";break;
+  }
+  if(effect!="patch_trace")contexts.erase(std::remove_if(contexts.begin(),contexts.end(),[&](const J& geometry){return geometry.value("traceOnly",false)||(boxes&&geometry.value("kind",std::string{})!="boxes");}),contexts.end());
+  if(spec.value("collectionGeometry",J()).is_string()&&effect!="media_collection"&&contexts.empty())contexts.push_back(sampleGeometry(boxes));
   if(effect=="text"&&clip.value("resolved_file",std::string{}).empty()){vj::TextSource source(cache()/"text");clip["resolved_file"]=source.asset(params,width,height);}
   if((effect=="image"||effect=="video")&&clip.contains("mediaStatus")&&!clip["mediaStatus"].value("available",true))return nil;if(contexts.empty())contexts.push_back(J::object());
   auto makeLayer=[&](const std::string& name,J values,const J& asset,int id){
@@ -95,7 +95,7 @@ public:
     if(childSpec.value("collectionGeometry",J()).is_string())layer.collection_geometry=childSpec["collectionGeometry"];
     if(name=="video"){layer.generator="image";layer.resolved_file=poster(layer.resolved_file,values).string();layer.params["scale"]=1.;layer.params["x"]=.5;layer.params["y"]=.5;}
     if((name=="image"||name=="text")&&layer.resolved_file.empty())throw std::runtime_error("Resolved thumbnail asset unavailable");
-    if(name.starts_with("external_")){if(!asset.contains("vector"))throw std::runtime_error("Thumbnail module unavailable");layer.vector=asset["vector"];layer.vector["canvas"]={width,height};}else if(childSpec.value("vector",false))layer.vector=vj::vectorRecipe(name,values,width,height);return layer;
+    if(name.starts_with("external_")){if(!asset.contains("vector"))throw std::runtime_error("Thumbnail module unavailable");layer.vector=asset["vector"];layer.vector["canvas"]={width,height};}return layer;
   };
   context();std::vector<uint8_t> maximum(width*height*3,0);for(const auto& geometry:contexts){if(cancelled_&&cancelled_())return nil;NativeBus bus;bus.running=true;bus.clock.playing=false;bus.collection=geometry;
     if(effect=="media_collection"){
@@ -157,7 +157,7 @@ public:
       if(!available){auto stable=clip.contains("id")?J::array({clip["id"],effect}).dump():J::array({effect,clip.value("params",J::object())}).dump();auto cached=_images[[NSString stringWithUTF8String:hash(stable).c_str()]];if(!cached)_model->requestPatchPoster(clip.value("params",J::object()).value("source",std::string{}));return cached;}
     }const bool live=effect=="ndi"||effect=="syphon"||effect=="usb_webcam";if(effect=="usb_webcam"||(live&&!_liveEnabled)||clip.value("nativeImportUnsupported",false))return nil;
     J identity={{"gen",effect},{"params",clip.value("params",J::object())}};for(auto name:{"vector","resolved_file","resolvedItems","mediaStatus","textStatus"})if(clip.contains(name))identity[name]=clip[name];
-    if(_contextEffects.contains(effect)&&!effect.starts_with("trace_")&&effect!="patch_trace"){identity["geometry"]=_contextKey;clip["_thumbnailContexts"]=_contexts;}
+    if(_contextEffects.contains(effect)&&effect!="patch_trace"){identity["geometry"]=_contextKey;clip["_thumbnailContexts"]=_contexts;}
     NSString* identityKey=[NSString stringWithUTF8String:hash(identity.dump()).c_str()];
     // Keep one strong poster per clip. Parameter scrubbing must not fill an
     // opportunistic NSCache with old versions and evict every unchanged slot.

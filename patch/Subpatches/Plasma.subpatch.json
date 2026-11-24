@@ -1,0 +1,147 @@
+{
+  "version": 2,
+  "component": {
+    "id": "EF64A6A8-C10D-50DD-B2FB-6DC0465A4244",
+    "name": "Plasma",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "F9E0EA91-86A2-5C5C-9AF7-14BAFF8E83E9",
+      "CAE055DA-8E72-57FD-824F-B562F4BB2008"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "48CC1E88-008C-5CF4-8082-7A2F34797B03",
+          "node": "CAE055DA-8E72-57FD-824F-B562F4BB2008",
+          "name": "Video",
+          "key": "Video",
+          "output": true,
+          "type": "video"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "DDCB904A-7929-534B-A4D1-C2D7C95DDE79",
+          "name": "Scale",
+          "node": "F9E0EA91-86A2-5C5C-9AF7-14BAFF8E83E9",
+          "key": "scale"
+        },
+        {
+          "id": "536C35C6-9344-5931-BE19-EA8FD583758D",
+          "name": "Hue",
+          "node": "F9E0EA91-86A2-5C5C-9AF7-14BAFF8E83E9",
+          "key": "hue"
+        },
+        {
+          "id": "1BA4EC4D-004C-5F7E-BCB8-F40965F3D172",
+          "name": "Hue Range",
+          "node": "F9E0EA91-86A2-5C5C-9AF7-14BAFF8E83E9",
+          "key": "spread"
+        },
+        {
+          "id": "4C279721-92A4-5A38-8A00-D56816BE6DBD",
+          "name": "Speed",
+          "node": "F9E0EA91-86A2-5C5C-9AF7-14BAFF8E83E9",
+          "key": "speed"
+        },
+        {
+          "id": "43618F9E-9474-4A8F-9E37-1D62FD25DA2E",
+          "name": "Hue Drift",
+          "node": "F9E0EA91-86A2-5C5C-9AF7-14BAFF8E83E9",
+          "key": "drift"
+        },
+        {
+          "id": "770EA33F-2B4E-4C2F-BDDA-DE18AB823B0E",
+          "name": "Contrast",
+          "node": "F9E0EA91-86A2-5C5C-9AF7-14BAFF8E83E9",
+          "key": "contrast"
+        }
+      ],
+      "preview": "CAE055DA-8E72-57FD-824F-B562F4BB2008"
+    }
+  },
+  "nodes": [
+    {
+      "id": "F9E0EA91-86A2-5C5C-9AF7-14BAFF8E83E9",
+      "kind": "fieldShader",
+      "name": "Plasma",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true,
+      "file": "bundle:User Nodes/Composition/Plasma.metal",
+      "fieldParameters": [
+        {
+          "key": "scale",
+          "title": "Scale",
+          "min": 0.1,
+          "max": 8,
+          "initial": 1.5
+        },
+        {
+          "key": "hue",
+          "title": "Hue",
+          "min": 0,
+          "max": 1,
+          "initial": 0.6
+        },
+        {
+          "key": "spread",
+          "title": "Hue Range",
+          "min": 0,
+          "max": 1,
+          "initial": 0.35
+        },
+        {
+          "key": "speed",
+          "title": "Speed",
+          "min": -4,
+          "max": 4,
+          "initial": 0.75,
+          "scalesFieldTime": true
+        },
+        {
+          "key": "drift",
+          "title": "Hue Drift",
+          "min": 0,
+          "max": 0.3,
+          "initial": 0.02
+        },
+        {
+          "key": "contrast",
+          "title": "Contrast",
+          "min": 0.5,
+          "max": 3,
+          "initial": 1.4
+        }
+      ]
+    },
+    {
+      "id": "CAE055DA-8E72-57FD-824F-B562F4BB2008",
+      "kind": "fieldRender",
+      "name": "Render Field",
+      "position": {
+        "x": 275,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [
+    {
+      "id": "DE2DEA80-980A-549B-833A-95B4D3906B1B",
+      "source": "F9E0EA91-86A2-5C5C-9AF7-14BAFF8E83E9",
+      "target": "CAE055DA-8E72-57FD-824F-B562F4BB2008",
+      "outputID": "Field",
+      "inputID": "Field"
+    }
+  ],
+  "midiMappings": []
+}

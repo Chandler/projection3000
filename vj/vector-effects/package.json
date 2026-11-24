@@ -3,8 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "build": "asc effects/vector-cube.ts --outFile ../static/vector/modules/vector-cube.wasm --optimize --runtime stub --noAssert && asc effects/electric-strips.ts --outFile ../static/vector/modules/electric-strips.wasm --optimize --runtime stub --noAssert && asc effects/vector-scan-lines.ts --outFile ../static/vector/modules/vector-scan-lines.wasm --optimize --runtime stub --noAssert && asc effects/lorenz-attractor.ts --outFile ../static/vector/modules/lorenz-attractor.wasm --optimize --runtime stub --noAssert && asc effects/slime-mold.ts --outFile ../static/vector/modules/slime-mold.wasm --optimize --runtime stub --noAssert && asc effects/laser-text.ts --outFile ../static/vector/modules/laser-text.wasm --optimize --runtime stub --noAssert",
-    "test": "node tests/test-modules.mjs"
+    "build": "asc effects/external-example.ts --outFile external-example.wasm --optimize --runtime stub --noAssert"
   },
   "devDependencies": {
     "assemblyscript": "0.28.20"

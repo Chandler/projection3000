@@ -138,6 +138,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         observation = workspace.objectWillChange.sink { [weak self] in DispatchQueue.main.async { self?.syncOutputs(); self?.updateTitle(); if let self { self.renderer.update(graph:self.workspace.renderGraph,playing:self.workspace.playing,publicationGraph:self.workspace.graph); self.nodePreview?.sync() } } }
         do { api = try ControlAPI(workspace:workspace,renderer:renderer,port:apiPort,listen:tabOwner == nil) }
         catch { workspace.message = "API unavailable: \(error.localizedDescription)" }
+        PatchSourceCatalog.shared.start(embedded:embedded,token:api?.token,ownPort:apiPort)
         api?.onFrame = { [weak self] in self?.canvas.fit() }
         api?.pinnedPreviewState = { [weak self] in self?.pinnedPreviewState ?? [] }
         api?.pinnedPreviewSnapshot = { [weak self] id,url in
@@ -282,8 +283,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         if !embedded { window.contentView = root }
         if !embedded && !headless { makeTabStrip(in:root) }
         let header = NSView(); header.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(header)
-        let brand = NSTextField(labelWithString:"PATCH"); brand.font = .monospacedSystemFont(ofSize:12,weight:.bold); brand.textColor = .patchAccent
-        titleLabel.font = .systemFont(ofSize:12,weight:.medium); titleLabel.bezelStyle = .smallSquare; titleLabel.isBordered = false; titleLabel.target = self; titleLabel.action = #selector(projectMenu); titleLabel.toolTip = "Project: rename, save, or switch"; titleLabel.setAccessibilityLabel("Project menu")
+        let brand = NSTextField(labelWithString:"PATCH"); brand.font = .systemFont(ofSize:EditorTypography.body,weight:.semibold); brand.textColor = .patchAccent
+        titleLabel.font = .systemFont(ofSize:EditorTypography.body,weight:.medium); titleLabel.bezelStyle = .smallSquare; titleLabel.isBordered = false; titleLabel.target = self; titleLabel.action = #selector(projectMenu); titleLabel.toolTip = "Project: rename, save, or switch"; titleLabel.setAccessibilityLabel("Project menu")
         let add = button("Add Node",symbol:"plus",action:#selector(addNode)); let importButton = button("Import",symbol:"square.and.arrow.down",action:#selector(importMedia))
         playButton = button("Pause",symbol:"pause.fill",action:#selector(togglePlay))
         backdropButton = button("Backdrop",symbol:"rectangle.on.rectangle",action:#selector(toggleBackdrop)); backdropButton.setButtonType(.toggle)
@@ -296,7 +297,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         let tabControl=button("Stop Tab",symbol:"stop.fill",action:#selector(toggleTabRunning)); headerRunButton=tabControl
         let runtimeControls: [NSView] = embedded || headless ? [] : [tabControl]
         let right = NSStackView(views:[importButton,add,fit,backdropButton,resolution,playButton] + runtimeControls + [midiToggle,detailsToggle]); right.spacing = 10; right.translatesAutoresizingMaskIntoConstraints = false; header.addSubview(right)
-        let browser = NSHostingView(rootView:NodeBrowser(workspace:workspace).disclosureGroupStyle(PatchDisclosureStyle()))
+        let browser = NSHostingView(rootView:NodeBrowser(workspace:workspace,insertionPoint:{ [weak self] in self?.canvas?.insertionPoint ?? Position(120,160) },frameSelection:{ [weak self] in self?.canvas.frameSelection() }).disclosureGroupStyle(PatchDisclosureStyle()))
         browserPane = browser; browser.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(browser)
         let split = NSStackView(); split.orientation = .horizontal; split.spacing = 1; split.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(split)
         canvas = GraphCanvas(workspace:workspace,renderer:renderer)
@@ -310,10 +311,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
         split.addArrangedSubview(graphContainer); split.addArrangedSubview(inspector)
         inspectorWidth = inspector.widthAnchor.constraint(equalToConstant:310); inspectorWidth.isActive = true
-        browserWidth = browser.widthAnchor.constraint(equalToConstant:172); browserWidth.isActive = true
+        browserWidth = browser.widthAnchor.constraint(equalToConstant:232); browserWidth.isActive = true
         let foot = NSView(); foot.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(foot)
-        footer.font = .monospacedSystemFont(ofSize:10,weight:.regular); footer.textColor = .patchMuted; footer.translatesAutoresizingMaskIntoConstraints = false; foot.addSubview(footer)
-        apiLabel.font = .monospacedSystemFont(ofSize:10,weight:.regular); apiLabel.textColor = .patchMuted; apiLabel.translatesAutoresizingMaskIntoConstraints = false; foot.addSubview(apiLabel)
+        footer.font = .systemFont(ofSize:EditorTypography.caption); footer.textColor = .patchMuted; footer.translatesAutoresizingMaskIntoConstraints = false; foot.addSubview(footer)
+        apiLabel.font = .systemFont(ofSize:EditorTypography.caption); apiLabel.textColor = .patchMuted; apiLabel.translatesAutoresizingMaskIntoConstraints = false; foot.addSubview(apiLabel)
         NSLayoutConstraint.activate([
             header.topAnchor.constraint(equalTo:root.topAnchor,constant:embedded ? 0 : headless ? 28 : 66),header.leadingAnchor.constraint(equalTo:root.leadingAnchor),header.trailingAnchor.constraint(equalTo:root.trailingAnchor),header.heightAnchor.constraint(equalToConstant:48),
             left.leadingAnchor.constraint(equalTo:header.leadingAnchor,constant:22),left.centerYAnchor.constraint(equalTo:header.centerYAnchor),
@@ -327,7 +328,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         if !embedded { window.center() }; root.layoutSubtreeIfNeeded(); restorePanes()
     }
     func button(_ title: String,symbol: String,action: Selector) -> NSButton {
-        let b = NSButton(title:title,target:self,action:action); b.image = NSImage(systemSymbolName:symbol,accessibilityDescription:title); b.imagePosition = .imageLeading; b.bezelStyle = .smallSquare; b.controlSize = .small; b.font = .systemFont(ofSize:11); return b
+        let b = NSButton(title:title,target:self,action:action); b.image = NSImage(systemSymbolName:symbol,accessibilityDescription:title); b.imagePosition = .imageLeading; b.bezelStyle = .smallSquare; b.controlSize = .small; b.font = .systemFont(ofSize:EditorTypography.item); return b
     }
     func tick() {
         // MTKView owns display scheduling; graph evaluation stays on renderQueue.
@@ -448,7 +449,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         if UserDefaults.standard.bool(forKey:"inspectorHidden") { toggleInspector() }
     }
     @objc func toggleLibrary() {
-        browserPane.isHidden.toggle(); browserWidth.constant = browserPane.isHidden ? 0 : 172
+        browserPane.isHidden.toggle(); browserWidth.constant = browserPane.isHidden ? 0 : 232
         UserDefaults.standard.set(browserPane.isHidden,forKey:"libraryHidden")
         editorRoot.layoutSubtreeIfNeeded()
     }

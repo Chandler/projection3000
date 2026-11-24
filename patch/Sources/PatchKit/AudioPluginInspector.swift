@@ -74,7 +74,7 @@ struct AudioPluginInspector: View {
                 HStack {
                     Text(parameter.name)
                     Spacer()
-                    Text(plugins.instance(id)?.texts[parameter.key] ?? "").font(.caption.monospaced()).foregroundStyle(.secondary)
+                    Text(plugins.instance(id)?.texts[parameter.key] ?? "").font(.editorValue).foregroundStyle(.secondary)
                 }
                 HStack {
                     ParameterControl(value:binding,in:spec.min...spec.max,step:spec.step,spec:spec,onEditingChanged:{ editing in

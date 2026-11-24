@@ -1,0 +1,81 @@
+{
+  "version": 2,
+  "component": {
+    "id": "CA1DAF32-AF02-538A-90FA-E3183E9D5145",
+    "name": "Lightning Pulses",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "EC56F91E-83EE-53BD-97C4-86017F8AEB4A"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "1575CEBF-5825-56C6-BD64-50A9FAE545EE",
+          "node": "EC56F91E-83EE-53BD-97C4-86017F8AEB4A",
+          "name": "Trace",
+          "key": "Trace",
+          "output": true,
+          "type": "trace"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "4FD3D1C1-4F25-5B38-A962-AFC2169A5775",
+          "name": "Pulses per Second",
+          "node": "EC56F91E-83EE-53BD-97C4-86017F8AEB4A",
+          "key": "rate"
+        },
+        {
+          "id": "956B7CB6-E03E-5CEF-A524-3D7163BE27D2",
+          "name": "Speed",
+          "node": "EC56F91E-83EE-53BD-97C4-86017F8AEB4A",
+          "key": "speed"
+        },
+        {
+          "id": "257BA914-10EB-570A-9CC5-9C6D3509D35C",
+          "name": "Length",
+          "node": "EC56F91E-83EE-53BD-97C4-86017F8AEB4A",
+          "key": "length"
+        },
+        {
+          "id": "5F806F5F-CDD8-54E4-B205-7516FA8277DA",
+          "name": "Afterglow",
+          "node": "EC56F91E-83EE-53BD-97C4-86017F8AEB4A",
+          "key": "tail"
+        },
+        {
+          "id": "21412E09-7E0D-5C69-881E-6F9765918DDD",
+          "name": "Forks",
+          "node": "EC56F91E-83EE-53BD-97C4-86017F8AEB4A",
+          "key": "forks"
+        },
+        {
+          "id": "44B847BA-16A2-5447-B8DD-78AAB7E40B1E",
+          "name": "Brightness",
+          "node": "EC56F91E-83EE-53BD-97C4-86017F8AEB4A",
+          "key": "brightness"
+        }
+      ],
+      "preview": "EC56F91E-83EE-53BD-97C4-86017F8AEB4A"
+    }
+  },
+  "nodes": [
+    {
+      "id": "EC56F91E-83EE-53BD-97C4-86017F8AEB4A",
+      "kind": "lightningPulses",
+      "name": "Lightning Pulses",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

@@ -1,0 +1,167 @@
+{
+  "version": 2,
+  "component": {
+    "id": "2729FDF5-8517-5768-BE1F-A7C1E99A198A",
+    "name": "Scan Lines",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "3FF09BAB-B07A-5180-9CFA-EB36989AC08D",
+      "E995280A-6386-52A2-8771-F55C4AF3692D"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "EFF96548-4271-5AA5-9339-7DF77EDD3242",
+          "node": "E995280A-6386-52A2-8771-F55C4AF3692D",
+          "name": "Video",
+          "key": "Video",
+          "output": true,
+          "type": "video"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "339DB7D6-5DEC-5BCC-ABBA-5E04A2E084B1",
+          "node": "3FF09BAB-B07A-5180-9CFA-EB36989AC08D",
+          "name": "Color",
+          "key": "tint"
+        },
+        {
+          "id": "2AE8E78A-2081-553E-A659-7E0D56DF3D8B",
+          "node": "3FF09BAB-B07A-5180-9CFA-EB36989AC08D",
+          "name": "Rate",
+          "key": "rate"
+        },
+        {
+          "id": "CB3F2054-55E2-5572-B330-ED310DCDAD57",
+          "node": "3FF09BAB-B07A-5180-9CFA-EB36989AC08D",
+          "name": "Angle",
+          "key": "angle"
+        },
+        {
+          "id": "0F1684F1-1329-51AA-90BF-77FBC8E6EFAB",
+          "node": "3FF09BAB-B07A-5180-9CFA-EB36989AC08D",
+          "name": "Spacing",
+          "key": "spacing"
+        },
+        {
+          "id": "ED29569A-CC3F-5906-8A84-030C6D1DA21B",
+          "node": "3FF09BAB-B07A-5180-9CFA-EB36989AC08D",
+          "name": "Width",
+          "key": "width"
+        },
+        {
+          "id": "C6EEA43E-7996-5726-AA8D-9A48D25EBD32",
+          "node": "3FF09BAB-B07A-5180-9CFA-EB36989AC08D",
+          "name": "Edge Blur",
+          "key": "blur"
+        },
+        {
+          "id": "759F14AE-D3B7-5C1A-AF3F-9E999627EA86",
+          "node": "3FF09BAB-B07A-5180-9CFA-EB36989AC08D",
+          "name": "Brightness",
+          "key": "amount"
+        }
+      ],
+      "preview": "E995280A-6386-52A2-8771-F55C4AF3692D"
+    }
+  },
+  "nodes": [
+    {
+      "id": "3FF09BAB-B07A-5180-9CFA-EB36989AC08D",
+      "kind": "fieldShader",
+      "name": "Scan Lines",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true,
+      "file": "bundle:User Nodes/Composition/Scan Lines.metal",
+      "fieldParameters": [
+        {
+          "key": "tint",
+          "title": "Color",
+          "min": 0,
+          "max": 16777215,
+          "initial": 3528959,
+          "unit": "sRGB24",
+          "step": 1,
+          "midi": false
+        },
+        {
+          "key": "rate",
+          "title": "Rate",
+          "min": -800,
+          "max": 800,
+          "initial": 110,
+          "unit": "px/s"
+        },
+        {
+          "key": "angle",
+          "title": "Angle",
+          "min": -180,
+          "max": 180,
+          "initial": 0,
+          "unit": "°"
+        },
+        {
+          "key": "spacing",
+          "title": "Spacing",
+          "min": 8,
+          "max": 600,
+          "initial": 110,
+          "unit": "px"
+        },
+        {
+          "key": "width",
+          "title": "Width",
+          "min": 1,
+          "max": 240,
+          "initial": 10,
+          "unit": "px"
+        },
+        {
+          "key": "blur",
+          "title": "Edge Blur",
+          "min": 0,
+          "max": 160,
+          "initial": 12,
+          "unit": "px"
+        },
+        {
+          "key": "amount",
+          "title": "Brightness",
+          "min": 0,
+          "max": 2,
+          "initial": 0.85
+        }
+      ]
+    },
+    {
+      "id": "E995280A-6386-52A2-8771-F55C4AF3692D",
+      "kind": "fieldRender",
+      "name": "Render Field",
+      "position": {
+        "x": 275,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [
+    {
+      "id": "7D9550A1-CFCD-55AD-9F3F-B00B6CD65D86",
+      "source": "3FF09BAB-B07A-5180-9CFA-EB36989AC08D",
+      "target": "E995280A-6386-52A2-8771-F55C4AF3692D",
+      "outputID": "Field",
+      "inputID": "Field"
+    }
+  ],
+  "midiMappings": []
+}

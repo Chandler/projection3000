@@ -16,7 +16,7 @@ struct PoseInspector: View {
     var body: some View {
         VStack(alignment:.leading,spacing:14) {
             HStack {
-                Text("POSE STYLE").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+                Text("POSE STYLE").font(.editorHeading).foregroundStyle(.secondary)
                 Spacer()
                 Menu("Presets") { ForEach(PoseStyle.presetNames,id:\.self) { name in Button(name) { apply(name) } } }
                 Button("Reset") { apply("Classic") }.buttonStyle(.plain).font(.system(size:10))
@@ -53,7 +53,7 @@ struct PoseInspector: View {
                             }
                         }
                     }.padding(.top,10)
-                } label: { Text(title).font(.system(size:10,weight:.medium,design:.monospaced)) }
+                } label: { Text(title).font(.editorItem.weight(.medium)) }
                 Divider()
             }
             Text("Continuous controls accept LFO, Noise and Audio Envelope modulation above. Presets keep modulation connections.").font(.system(size:10)).foregroundStyle(.secondary)

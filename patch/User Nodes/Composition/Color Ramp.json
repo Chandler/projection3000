@@ -1,0 +1,56 @@
+{
+  "name": "Color Ramp",
+  "kind": "fieldShader",
+  "file": "Color Ramp.metal",
+  "parameters": [
+    {
+      "key": "start",
+      "title": "Start Color",
+      "min": 0,
+      "max": 16777215,
+      "initial": 2429513,
+      "step": 1,
+      "unit": "sRGB24",
+      "midi": false
+    },
+    {
+      "key": "end",
+      "title": "End Color",
+      "min": 0,
+      "max": 16777215,
+      "initial": 16347976,
+      "step": 1,
+      "unit": "sRGB24",
+      "midi": false
+    },
+    {
+      "key": "angle",
+      "title": "Angle",
+      "min": -180,
+      "max": 180,
+      "initial": 10,
+      "unit": "°"
+    },
+    {
+      "key": "width",
+      "title": "Width",
+      "min": 0.01,
+      "max": 4,
+      "initial": 1
+    },
+    {
+      "key": "shift",
+      "title": "Offset",
+      "min": -1,
+      "max": 1,
+      "initial": 0
+    },
+    {
+      "key": "amount",
+      "title": "Gradient Amount",
+      "min": 0,
+      "max": 1,
+      "initial": 1
+    }
+  ]
+}

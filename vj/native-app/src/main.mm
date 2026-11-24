@@ -1,11 +1,12 @@
+#include "text_source.hpp"
 #include "calibration_debug_codec.hpp"
 #include "calibration_capture.hpp"
-#include "vector_catalog.hpp"
 #import "app.hpp"
 #import "show_library.hpp"
 #include "api_server.hpp"
 #include "remote_server.hpp"
 #include "state_lock.hpp"
+#include "PatchLibrary.h"
 #include "midi_runtime.hpp"
 #include <iostream>
 int main(int argc,char** argv){@autoreleasepool{
@@ -28,7 +29,6 @@ int main(int argc,char** argv){@autoreleasepool{
         if(startupPolicy.empty())startupPolicy=(defaultRoot||libraryShow)&&!check?"restore":"isolated";
         if(startupPolicy!="isolated"&&startupPolicy!="restore")throw std::runtime_error("Invalid startup policy");
         vj::installMacTextRasterizer();
-        vj::installMacVectorTextOutliner();
         vj::installFFmpegMediaInspector();
         vj::installWasmtimeModuleValidator();vj::installLiveCalibrationCapture();vj::installCalibrationDebugPngCodec();
         vj::StateLock lock(root);
@@ -37,6 +37,14 @@ int main(int argc,char** argv){@autoreleasepool{
             if(!getenv("VJ_PATCH_SESSION"))setenv("VJ_PATCH_SESSION",(root/"Patch/session.json").c_str(),1);
         }
         vj::Model model(root);
+        model.setLibraryRequest([](const std::string& method,const std::string& path,const vj::Json& body)->vj::Reply {
+            if(path=="/v1/library/place")return VJPlaceLibrarySubpatch(body);
+            std::unique_ptr<char,decltype(&PatchLibraryFreeJSON)> result(
+                PatchLibraryRequestJSON(method.c_str(),path.c_str(),body.dump().c_str()),PatchLibraryFreeJSON);
+            auto response=result?vj::Json::parse(result.get(),nullptr,false):vj::Json();
+            if(!response.is_object()||!response.contains("body"))return {500,{{"error","Invalid Patch library response"}}};
+            return {response.value("status",500),response.at("body")};
+        });
         model.setRestoreDevices(!check&&startupPolicy=="restore");vj::ApiServer server(model,port,address);
         // Phone mapping remote on the LAN; 0 disables. The key persists so saved links keep working.
         std::unique_ptr<vj::RemoteServer> remote;if(!check&&remotePort){

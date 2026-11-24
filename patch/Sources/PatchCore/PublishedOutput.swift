@@ -109,7 +109,7 @@ public enum CollectionStyle {
         .init("brightness","Brightness",0,1,0.7),
         .init("center_glow","Center glow",0,1,1),
         .init("falloff","Glow falloff",0.25,6,1.5),
-        .init("color","Color",0,16777215,16777215,midi:false,step:1),
+        .init("color","Color",0,16777215,16777215,midi:false,step:1,unit:"sRGB24"),
         .init("previewFaces","Preview surfaces",1,64,12,midi:false,step:1)
     ]
     public static let inkParameters: [ParameterSpec] = [

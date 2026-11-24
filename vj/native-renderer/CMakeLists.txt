@@ -254,3 +254,12 @@ if(APPLE AND BUILD_TESTING)
 endif()
 
 include(cmake/NDI.cmake)
+
+if(APPLE)
+    include(cmake/MappedMetal.cmake)
+    foreach(target vibe-native-render vibe-webcam-layer-test vibe-image-layer-test vibe-syphon-layer-test)
+        if(TARGET ${target})
+            target_link_libraries(${target} PRIVATE vj_mapped_metal)
+        endif()
+    endforeach()
+endif()

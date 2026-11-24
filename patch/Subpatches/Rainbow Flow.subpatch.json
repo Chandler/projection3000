@@ -1,0 +1,74 @@
+{
+  "version": 2,
+  "component": {
+    "id": "FDA9A17D-E7CD-55DA-A80C-2D113C7204C4",
+    "name": "Rainbow Flow",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "E49DDC5D-B71D-58DB-A1A5-1A8163B7E2DC"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "14FEE87B-DC25-5CA5-BE35-19742F8E1681",
+          "node": "E49DDC5D-B71D-58DB-A1A5-1A8163B7E2DC",
+          "name": "Trace",
+          "key": "Trace",
+          "output": true,
+          "type": "trace"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "182ADCE6-E8D8-5136-9A81-45F6DD46F680",
+          "name": "Speed",
+          "node": "E49DDC5D-B71D-58DB-A1A5-1A8163B7E2DC",
+          "key": "speed"
+        },
+        {
+          "id": "CB0EF368-A5A4-58F2-942F-BFF161D0E93E",
+          "name": "Hue spread",
+          "node": "E49DDC5D-B71D-58DB-A1A5-1A8163B7E2DC",
+          "key": "spread"
+        },
+        {
+          "id": "9ED419D6-77DC-5368-B926-6C1884E99CC5",
+          "name": "Brightness",
+          "node": "E49DDC5D-B71D-58DB-A1A5-1A8163B7E2DC",
+          "key": "brightness"
+        },
+        {
+          "id": "BAD7BACB-116D-5008-BF28-7A73673D6373",
+          "name": "Beat pulse",
+          "node": "E49DDC5D-B71D-58DB-A1A5-1A8163B7E2DC",
+          "key": "pulse"
+        }
+      ],
+      "preview": "E49DDC5D-B71D-58DB-A1A5-1A8163B7E2DC"
+    }
+  },
+  "nodes": [
+    {
+      "id": "E49DDC5D-B71D-58DB-A1A5-1A8163B7E2DC",
+      "kind": "traceRainbow",
+      "name": "Rainbow Flow",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "speed": 0.25,
+        "spread": 1.0,
+        "brightness": 1.0,
+        "pulse": 0.0
+      },
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

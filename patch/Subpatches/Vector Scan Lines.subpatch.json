@@ -1,0 +1,125 @@
+{
+  "version": 2,
+  "component": {
+    "id": "078950FF-4C2C-508C-BBD2-CA320EC29C3F",
+    "name": "Vector Scan Lines",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "8528D592-E713-50E5-A2D1-42B65003F379"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "A6B3B4D3-2A4A-5C49-BC85-D76EDA2DFF3C",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "Video",
+          "name": "Video",
+          "type": "video",
+          "output": true
+        },
+        {
+          "id": "0C4921E4-400E-59E0-BA33-5DE8FBB41F3A",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "Path",
+          "name": "Path",
+          "type": "vectorPath",
+          "output": true
+        }
+      ],
+      "parameters": [
+        {
+          "id": "21D6E9F2-EF00-5F3F-9CBA-2100EE845B7D",
+          "name": "Core color",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "tint"
+        },
+        {
+          "id": "D626AA14-79DA-5B9C-B3E0-BE7585160732",
+          "name": "Glow color",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "glow"
+        },
+        {
+          "id": "D66ACD50-C442-5001-A1A6-41262B6E2B28",
+          "name": "Rate",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "rate"
+        },
+        {
+          "id": "3A41B982-7927-5A78-9A7B-02D1835AAA9D",
+          "name": "Angle",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "angle"
+        },
+        {
+          "id": "BA8A4575-B0C5-52E8-AE5D-794032ECB5EF",
+          "name": "Spacing",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "spacing"
+        },
+        {
+          "id": "5CE1EF98-859A-54FA-9710-3564BBC0A75E",
+          "name": "Core width",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "width"
+        },
+        {
+          "id": "DC98D426-11F3-51D1-9288-6F364AE2949B",
+          "name": "Glow radius",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "blur"
+        },
+        {
+          "id": "AED8587B-1702-53DB-9F4E-3B1A0A16F337",
+          "name": "Brightness",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "amount"
+        },
+        {
+          "id": "ABB90C64-1CDA-5F51-9186-B1CE2F83AC56",
+          "name": "Wave amount",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "wave"
+        },
+        {
+          "id": "F3934574-8772-58A4-BB22-B57F917CEBE3",
+          "name": "Wave frequency",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "wave_frequency"
+        },
+        {
+          "id": "C87F7EFC-8EFD-584A-B4A1-C4E899CA3AC2",
+          "name": "Beat pulse",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "pulse"
+        },
+        {
+          "id": "2D5D99A1-D495-5A20-BD73-809BA9480023",
+          "name": "Pulse tempo",
+          "node": "8528D592-E713-50E5-A2D1-42B65003F379",
+          "key": "tempo"
+        }
+      ],
+      "preview": "8528D592-E713-50E5-A2D1-42B65003F379"
+    }
+  },
+  "nodes": [
+    {
+      "id": "8528D592-E713-50E5-A2D1-42B65003F379",
+      "kind": "vectorScanLines",
+      "name": "Vector Scan Lines",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

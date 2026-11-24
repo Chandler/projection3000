@@ -1,0 +1,113 @@
+{
+  "version": 2,
+  "component": {
+    "id": "31B21112-2FE7-558A-8D86-8080B4639176",
+    "name": "Slime Mold",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "E56044B8-37BC-5C69-BE27-D0275B298E86"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "12032077-9899-5703-9A06-E35005E56746",
+          "node": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+          "key": "Video",
+          "name": "Video",
+          "type": "video",
+          "output": true
+        },
+        {
+          "id": "1AFF4082-62CE-545E-A79C-C825D0C070CE",
+          "node": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+          "key": "Path",
+          "name": "Path",
+          "type": "vectorPath",
+          "output": true
+        }
+      ],
+      "parameters": [
+        {
+          "id": "53553986-4666-5C46-A473-F7AF79C0987F",
+          "name": "Density",
+          "node": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+          "key": "density"
+        },
+        {
+          "id": "18F759FC-8432-551B-AC04-9D12F4E5E485",
+          "name": "Radial growth",
+          "node": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+          "key": "branching"
+        },
+        {
+          "id": "9536CB70-5A54-5686-AFA4-A19B664044D1",
+          "name": "Origin X",
+          "node": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+          "key": "x"
+        },
+        {
+          "id": "585AEFB9-59A4-565A-95E0-D18D7DEBD37C",
+          "name": "Origin Y",
+          "node": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+          "key": "y"
+        },
+        {
+          "id": "42E15AA5-AFC6-5877-B896-A9F218545F55",
+          "name": "Line width",
+          "node": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+          "key": "line_width"
+        },
+        {
+          "id": "DC6DF83E-667B-5393-86A0-F8EB921FC0CC",
+          "name": "Pulse amount",
+          "node": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+          "key": "pulse"
+        },
+        {
+          "id": "9A0D3A39-5748-51AF-9604-B6158C6D3A9A",
+          "name": "Pulse speed",
+          "node": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+          "key": "speed"
+        },
+        {
+          "id": "B62EEC38-07BF-5C3C-92D2-E30CBB77BB2C",
+          "name": "Pulse length",
+          "node": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+          "key": "pulse_length"
+        },
+        {
+          "id": "69EEB88E-09BD-59D7-9D81-74E7E8B54EDD",
+          "name": "Color",
+          "node": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+          "key": "color"
+        },
+        {
+          "id": "0590F69B-1497-5FF4-9E45-121A58B65162",
+          "name": "Seed",
+          "node": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+          "key": "seed"
+        }
+      ],
+      "preview": "E56044B8-37BC-5C69-BE27-D0275B298E86"
+    }
+  },
+  "nodes": [
+    {
+      "id": "E56044B8-37BC-5C69-BE27-D0275B298E86",
+      "kind": "slimeMold",
+      "name": "Slime Mold",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

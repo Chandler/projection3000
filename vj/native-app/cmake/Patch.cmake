@@ -21,7 +21,20 @@ add_custom_command(OUTPUT "${VJ_PATCH_LIBRARY}"
   COMMAND ${VJ_PATCH_ENV} "${VJ_SWIFT}" build --package-path "${VJ_PATCH_ROOT}" --scratch-path "${VJ_PATCH_BUILD}" -c release --product PatchKit -j 2
   DEPENDS ${VJ_PATCH_INPUTS} "${VJ_PATCH_ROOT}/Package.swift"
   COMMENT "Building shared Patch editor and render runtime" VERBATIM)
+set(VJ_PATCH_MIGRATE "${VJ_PATCH_BUILD}/release/patch-migrate")
+add_custom_command(OUTPUT "${VJ_PATCH_MIGRATE}"
+  COMMAND ${VJ_PATCH_ENV} "${VJ_SWIFT}" build --package-path "${VJ_PATCH_ROOT}" --scratch-path "${VJ_PATCH_BUILD}" -c release --product patch-migrate -j 2
+  DEPENDS "${VJ_PATCH_LIBRARY}" ${VJ_PATCH_INPUTS}
+  COMMENT "Building show migration utility" VERBATIM)
+add_custom_target(vj-show-migrate DEPENDS "${VJ_PATCH_MIGRATE}")
+add_dependencies(VJNative vj-show-migrate)
+set_property(TARGET VJNative APPEND PROPERTY LINK_DEPENDS "${VJ_PATCH_MIGRATE}")
+add_custom_command(TARGET VJNative POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:VJNative>/Helpers"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${VJ_PATCH_MIGRATE}" "$<TARGET_BUNDLE_CONTENT_DIR:VJNative>/Helpers/patch-migrate"
+  VERBATIM)
 add_custom_target(vj-patch-build DEPENDS "${VJ_PATCH_LIBRARY}")
+add_dependencies(vj-show-migrate vj-patch-build)
 add_library(vj_patch SHARED IMPORTED)
 set_target_properties(vj_patch PROPERTIES IMPORTED_LOCATION "${VJ_PATCH_LIBRARY}" INTERFACE_INCLUDE_DIRECTORIES "${VJ_PATCH_ROOT}/include")
 add_dependencies(vj_patch vj-patch-build)
@@ -39,7 +52,8 @@ add_dependencies(VJNative vj-plugin-host)
 # Refresh bundled assets even when only a shader or user node changes.
 file(GLOB_RECURSE VJ_PATCH_ASSETS CONFIGURE_DEPENDS
   "${VJ_PATCH_ROOT}/Sources/PatchKit/Resources/*"
-  "${VJ_PATCH_ROOT}/User Nodes/*")
+  "${VJ_PATCH_ROOT}/User Nodes/*"
+  "${VJ_PATCH_ROOT}/Subpatches/*")
 set_property(TARGET VJNative APPEND PROPERTY LINK_DEPENDS "${VJ_PLUGIN_HOST}" ${VJ_PATCH_ASSETS})
 add_custom_command(TARGET VJNative POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:VJNative>/Frameworks"
@@ -52,5 +66,6 @@ target_include_directories(vj_preview_engine PRIVATE "${VJ_PATCH_ROOT}/Sources/O
 set_property(TARGET VJNative APPEND PROPERTY BUILD_RPATH "@executable_path/../Frameworks" "/usr/lib/swift")
 add_custom_command(TARGET VJNative POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${VJ_PATCH_BUILD}/release/Patch_PatchKit.bundle" "$<TARGET_BUNDLE_CONTENT_DIR:VJNative>/Resources/PatchResources.bundle"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${VJ_PATCH_ROOT}/Subpatches" "$<TARGET_BUNDLE_CONTENT_DIR:VJNative>/Resources/Subpatches"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${VJ_PATCH_ROOT}/User Nodes" "$<TARGET_BUNDLE_CONTENT_DIR:VJNative>/Resources/User Nodes"
   VERBATIM)

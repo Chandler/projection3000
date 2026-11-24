@@ -9,7 +9,7 @@ struct NDIInputInspector: View {
     @State private var source=""
     var body: some View {
         VStack(alignment:.leading,spacing:8) {
-            Text("NDI SOURCE").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+            Text("NDI SOURCE").font(.editorHeading).foregroundStyle(.secondary)
             HStack {
                 TextField("MACHINE (Stream)",text:$source).textFieldStyle(.squareBorder).onSubmit { connect(source) }
                 // Discovery keeps running in the background; the menu lists whatever is visible now.

@@ -1,8 +1,8 @@
+#include "text_source.hpp"
 #include "calibration_debug_codec.hpp"
 #include "midi_runtime.hpp"
 #include "link_runtime.hpp"
 #include "calibration_capture.hpp"
-#include "vector_catalog.hpp"
 #include "api_server.hpp"
 #include "render_host.hpp"
 #include "state_lock.hpp"
@@ -37,7 +37,6 @@ int main(int argc,char** argv){
         if(root.empty())throw std::runtime_error("--state-root is required for the native development runtime");
 #ifdef __APPLE__
         vj::installMacTextRasterizer();
-        vj::installMacVectorTextOutliner();
 #endif
         options.publishOutputs=!check;
         vj::installFFmpegMediaInspector();

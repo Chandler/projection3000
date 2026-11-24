@@ -83,7 +83,7 @@ struct DitherInspector: View {
             }
         }
     }
-    func heading(_ title: String) -> some View { Text(title).font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary).frame(maxWidth:.infinity,alignment:.leading).padding(.top,8) }
+    func heading(_ title: String) -> some View { Text(title).font(.editorHeading).foregroundStyle(.secondary).frame(maxWidth:.infinity,alignment:.leading).padding(.top,8) }
     private func applyPalette(_ palette: DitherPalette) {
         workspace.edit("Dither Palette") { graph in
             for (key,value) in [("tonal",4),("shadowColor",palette.shadow),("midtoneColor",palette.midtone),("highlightColor",palette.highlight)] {

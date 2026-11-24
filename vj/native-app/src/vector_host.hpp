@@ -1,6 +1,5 @@
 #pragma once
 #include "native_render_graph.hpp"
-#include "vector_catalog.hpp"
 #include <filesystem>
 #include <memory>
 namespace vj {
@@ -9,7 +8,7 @@ void installWasmtimeModuleValidator();
 // Construct, render and destroy on the owning OpenGL context thread.
 class VectorHost {
 public:
-    explicit VectorHost(std::filesystem::path bundledModules=defaultVectorModuleRoot(),std::filesystem::path uploadedModules={});
+    explicit VectorHost(std::filesystem::path uploadedModules);
     ~VectorHost();
     void install(NativeRenderGraph& graph);
     void beginFrame(std::uint64_t revision);

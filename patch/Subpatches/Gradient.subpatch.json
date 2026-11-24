@@ -1,0 +1,153 @@
+{
+  "version": 2,
+  "component": {
+    "id": "0BE9523A-32E8-5AB8-BE04-CB0C40053181",
+    "name": "Gradient",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "6ED2FC40-8318-5327-9A80-AC6740A04D3E",
+      "39BF68F7-1F79-5529-8BEC-B0E01BB2DD5E"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "4239D731-98D2-5594-9571-6AADDD40028F",
+          "node": "39BF68F7-1F79-5529-8BEC-B0E01BB2DD5E",
+          "name": "Video",
+          "key": "Video",
+          "output": true,
+          "type": "video"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "170C7EEF-18E0-51D1-AF44-0916264436EC",
+          "name": "Start Color",
+          "node": "6ED2FC40-8318-5327-9A80-AC6740A04D3E",
+          "key": "start"
+        },
+        {
+          "id": "B987D984-89D7-5811-94E5-2F6EDF9D69B5",
+          "name": "End Color",
+          "node": "6ED2FC40-8318-5327-9A80-AC6740A04D3E",
+          "key": "end"
+        },
+        {
+          "id": "5D974191-0829-5A83-B578-7A91BC7B5FF9",
+          "name": "Angle",
+          "node": "6ED2FC40-8318-5327-9A80-AC6740A04D3E",
+          "key": "angle"
+        },
+        {
+          "id": "017326F1-5201-59C3-AA61-268D0261562F",
+          "name": "Width",
+          "node": "6ED2FC40-8318-5327-9A80-AC6740A04D3E",
+          "key": "width"
+        },
+        {
+          "id": "7088515F-2AB7-5AE5-9B38-EC0FBED3BAE1",
+          "name": "Offset",
+          "node": "6ED2FC40-8318-5327-9A80-AC6740A04D3E",
+          "key": "shift"
+        },
+        {
+          "id": "DBDD9B52-F897-5E54-91F9-CD9ACBFB48B6",
+          "name": "Gradient Amount",
+          "node": "6ED2FC40-8318-5327-9A80-AC6740A04D3E",
+          "key": "amount"
+        }
+      ],
+      "preview": "39BF68F7-1F79-5529-8BEC-B0E01BB2DD5E"
+    }
+  },
+  "nodes": [
+    {
+      "id": "6ED2FC40-8318-5327-9A80-AC6740A04D3E",
+      "kind": "fieldShader",
+      "name": "Color Ramp",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true,
+      "file": "bundle:User Nodes/Composition/Color Ramp.metal",
+      "fieldParameters": [
+        {
+          "key": "start",
+          "title": "Start Color",
+          "min": 0,
+          "max": 16777215,
+          "initial": 2429513,
+          "step": 1,
+          "unit": "sRGB24",
+          "midi": false
+        },
+        {
+          "key": "end",
+          "title": "End Color",
+          "min": 0,
+          "max": 16777215,
+          "initial": 16347976,
+          "step": 1,
+          "unit": "sRGB24",
+          "midi": false
+        },
+        {
+          "key": "angle",
+          "title": "Angle",
+          "min": -180,
+          "max": 180,
+          "initial": 10,
+          "unit": "°"
+        },
+        {
+          "key": "width",
+          "title": "Width",
+          "min": 0.01,
+          "max": 4,
+          "initial": 1
+        },
+        {
+          "key": "shift",
+          "title": "Offset",
+          "min": -1,
+          "max": 1,
+          "initial": 0
+        },
+        {
+          "key": "amount",
+          "title": "Gradient Amount",
+          "min": 0,
+          "max": 1,
+          "initial": 1
+        }
+      ]
+    },
+    {
+      "id": "39BF68F7-1F79-5529-8BEC-B0E01BB2DD5E",
+      "kind": "fieldRender",
+      "name": "Render Field",
+      "position": {
+        "x": 275,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [
+    {
+      "id": "A17683DB-20F0-5F56-9000-82AB47424172",
+      "source": "6ED2FC40-8318-5327-9A80-AC6740A04D3E",
+      "target": "39BF68F7-1F79-5529-8BEC-B0E01BB2DD5E",
+      "outputID": "Field",
+      "inputID": "Field"
+    }
+  ],
+  "midiMappings": []
+}

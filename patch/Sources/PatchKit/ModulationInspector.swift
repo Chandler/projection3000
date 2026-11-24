@@ -21,7 +21,7 @@ struct ModulationInspector: View {
         if let node {
             VStack(alignment:.leading,spacing:10) {
                 if node.kind == .apc40 {
-                    Text("FADERS").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+                    Text("FADERS").font(.editorHeading).foregroundStyle(.secondary)
                     TimelineView(.periodic(from:.now,by:0.1)) { _ in
                         let values = renderer.apcState.snapshot
                         ForEach(Array(0..<8) + [24,25],id:\.self) { output in
@@ -42,18 +42,18 @@ struct ModulationInspector: View {
                     DisclosureGroup("Control values") {
                     TimelineView(.periodic(from:.now,by:0.1)) { _ in
                         ForEach(APC40.outputs.indices,id:\.self) { output in
-                            HStack { Text(APC40.outputs[output]); Spacer(); Text(renderer.apcState.snapshot[output].map { String(format:"%.3f",$0) } ?? "Waiting") }.font(.system(size:10,design:.monospaced))
+                            HStack { Text(APC40.outputs[output]); Spacer(); Text(renderer.apcState.snapshot[output].map { String(format:"%.3f",$0) } ?? "Waiting") }.font(.editorCaption.monospacedDigit())
                         }
                     }
                     }
                 } else if node.kind.outputType == .control {
                     TimelineView(.periodic(from:.now,by:0.1)) { _ in
-                    HStack { Text("CONTROL OUTPUT"); Spacer(); Text((renderer.controlValues[id] ?? 0).formatted(.number.precision(.fractionLength(3)))) }.font(.system(size:10,design:.monospaced))
+                    HStack { Text("CONTROL OUTPUT"); Spacer(); Text((renderer.controlValues[id] ?? 0).formatted(.number.precision(.fractionLength(3)))) }.font(.editorCaption.monospacedDigit())
                     }
                 }
                 if !node.modulationSpecs.isEmpty {
                     HStack {
-                        Text("MODULATION").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+                        Text("MODULATION").font(.editorHeading).foregroundStyle(.secondary)
                         Spacer()
                         Menu("Add…") {
                             ForEach(node.modulationSpecs,id:\.key) { spec in
@@ -91,7 +91,7 @@ struct ModulationInspector: View {
                                     TextField("Max",value:Binding(get:{ self.node?.modulations?[key]?.maximum ?? spec.max },set:{ value in update(key) { $0.maximum = value } }),format:.number.precision(.fractionLength(0...3))).textFieldStyle(.squareBorder)
                                 }
                                 TimelineView(.periodic(from:.now,by:0.1)) { _ in
-                                Text("Live: \((renderer.modulationValues[id]?[key] ?? node.value(key)).formatted(.number.precision(.fractionLength(3))))  ·  Base: \(node.value(key).formatted(.number.precision(.fractionLength(3))))").font(.system(size:10,design:.monospaced)).foregroundStyle(.secondary)
+                                Text("Live: \((renderer.modulationValues[id]?[key] ?? node.value(key)).formatted(.number.precision(.fractionLength(3))))  ·  Base: \(node.value(key).formatted(.number.precision(.fractionLength(3))))").font(.editorCaption.monospacedDigit()).foregroundStyle(.secondary)
                                 }
                             }.padding(.vertical,6)
                         }

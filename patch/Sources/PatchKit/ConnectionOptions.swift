@@ -11,7 +11,7 @@ struct ConnectionOption: Encodable {
 extension CatalogNode {
     func connectionOptions(for type: PortType, fromOutput: Bool) -> [ConnectionOption] {
         var instance = Node(kind:kind)
-        instance.fieldParameters = fieldParameters
+        instance.configureShaderParameters(fieldParameters)
         instance.controlStyle = controlStyle
         instance.file = file?.path
         var options = instance.ports(output:!fromOutput).compactMap { port -> ConnectionOption? in

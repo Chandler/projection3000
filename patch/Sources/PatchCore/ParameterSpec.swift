@@ -34,7 +34,7 @@ public struct ParameterSpec: Codable, Equatable, Sendable {
     public static func validateShaderParameters(_ parameters: [Self]) throws {
         guard parameters.filter({ $0.scalesFieldTime == true }).count <= 1 else { throw GraphError("Only one parameter can scale field time") }
         guard parameters.count <= 15, Set(parameters.map(\.key)).count == parameters.count else {
-            throw GraphError("A Field Shader supports up to 15 parameters with unique keys")
+            throw GraphError("A shader supports up to 15 parameters with unique keys")
         }
         for spec in parameters {
             guard !spec.key.isEmpty, spec.key.count <= 96, !spec.title.isEmpty, spec.title.count <= 128,

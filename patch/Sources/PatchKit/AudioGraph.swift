@@ -179,6 +179,10 @@ final class AudioGraphEngine {
         let level: Double
     }
     private var routing = SignalRouting()
+    private var vectorArtPaths: [UUID:VectorPath] = [:]
+    func setVectorArtPath(_ path: VectorPath?, id: UUID) {
+        lock.withLock { vectorArtPaths[id] = path }
+    }
     private var vectorPaths: [UUID:(VectorPath.Signature,VectorPath)] = [:]
     private var vectorPhases: [UUID:Double] = [:]
     private var vectorSources = Set<UUID>()
@@ -309,6 +313,7 @@ final class AudioGraphEngine {
                 let wanted = Set(graph.nodes.filter { $0.kind == .microphone && $0.enabled }.map { $0.deviceID ?? "default" })
                 self.microphones = self.microphones.filter { wanted.contains($0.key) }
                 let ids = Set(graph.nodes.map(\.id))
+                self.lock.withLock { self.vectorArtPaths = self.vectorArtPaths.filter { ids.contains($0.key) } }
                 self.vectorPaths=self.vectorPaths.filter { ids.contains($0.key) }; self.vectorPhases=self.vectorPhases.filter { ids.contains($0.key) }
                 self.deviceRates=self.deviceRates.filter { ids.contains($0.key) && self.graph.node($0.key)?.deviceID == graph.node($0.key)?.deviceID };self.hardwareKeys=self.hardwareKeys.filter { ids.contains($0.key) };self.hardwareRetry=self.hardwareRetry.filter { ids.contains($0.key) };self.hardwareErrors=self.hardwareErrors.filter { ids.contains($0.key) }
                 self.envelopes = self.envelopes.filter { ids.contains($0.key) }; self.envelopeHistory = self.envelopeHistory.filter { ids.contains($0.key) }
@@ -420,6 +425,12 @@ final class AudioGraphEngine {
             }
             if node.kind.outputType == .vectorPath {
                 guard node.enabled else { continue }
+                if node.kind.vectorArtModule != nil {
+                    if let path = lock.withLock({ vectorArtPaths[node.id] }) {
+                        pathSignals[SignalOutlet(node:node.id,port:0)] = PathSignal(path:path,rotation:0,angularVelocity:0)
+                    }
+                    continue
+                }
                 let signature = VectorPath.Signature(node)
                 if vectorPaths[node.id]?.0 != signature {
                     vectorPaths[node.id] = (signature, VectorPath.shape(node))

@@ -11,7 +11,7 @@ struct CatalogNode: Identifiable, Equatable {
     var parameterTitles: [String:String] = [:]
     var fieldParameters: [ParameterSpec]?
     var parameterSpecs: [ParameterSpec] {
-        (kind == .fieldShader ? (fieldParameters ?? []) : kind == .scene && controlStyle == "metallicPool" ? MetallicPoolStyle.parameters : kind == .shaderEffect && controlStyle == "liquidMetal" ? LiquidMetalStyle.parameters : kind == .shaderEffect && controlStyle == "liquidChrome" ? LiquidChromeStyle.parameters : kind == .shaderEffect && controlStyle == "ferrofluid" ? FerrofluidStyle.parameters : kind == .shaderEffect && controlStyle == "blinds" ? BlindsStyle.parameters : kind.parameters).map { spec in
+        (fieldParameters ?? (kind == .fieldShader ? [] : kind == .scene && controlStyle == "metallicPool" ? MetallicPoolStyle.parameters : kind == .shaderEffect && controlStyle == "liquidMetal" ? LiquidMetalStyle.parameters : kind == .shaderEffect && controlStyle == "liquidChrome" ? LiquidChromeStyle.parameters : kind == .shaderEffect && controlStyle == "ferrofluid" ? FerrofluidStyle.parameters : kind == .shaderEffect && controlStyle == "blinds" ? BlindsStyle.parameters : kind.parameters)).map { spec in
             spec.withTitle(parameterTitles[spec.key] ?? spec.title)
         }
     }
@@ -80,7 +80,7 @@ final class UserNodeLibrary: ObservableObject {
         let controlStyle: String?
         let parameters: [ParameterSpec]?
         var fieldParameters: [ParameterSpec]? {
-            guard kind == .fieldShader else { return nil }
+            guard kind == .fieldShader || kind == .shaderEffect && parameters != nil else { return nil }
             return (parameters ?? []).map { $0.withTitle(parameterTitles?[$0.key] ?? $0.title) }
         }
     }
@@ -126,7 +126,10 @@ final class UserNodeLibrary: ObservableObject {
                         let item = try JSONDecoder().decode(Metadata.self,from:data)
                         if item.kind == .streakGlow { retired.insert(file); continue }
                         if let kind = item.kind, !Self.fileKinds.contains(kind) { throw GraphError("Unsupported shader kind "+kind.rawValue) }
-                        if let specs = item.fieldParameters { try ParameterSpec.validateShaderParameters(specs) }
+                        if let specs = item.fieldParameters {
+                            guard item.controlStyle == nil else { throw GraphError("Choose a built-in control style or declare shader parameters") }
+                            try ParameterSpec.validateShaderParameters(specs)
+                        }
                         if metadata[file] != nil { throw GraphError("Multiple manifests name "+file) }
                         metadata[file] = item
                     } catch {
@@ -178,7 +181,7 @@ extension Node {
         hasBlindsControls || kind == .shaderEffect && UserNodeLibrary.shared.entries.contains { $0.file?.path == file && $0.controlStyle == "blinds" }
     }
     var parameterSpecs: [ParameterSpec] {
-        if kind == .fieldShader { return parameterDefinitions }
+        if kind == .fieldShader || fieldParameters != nil { return parameterDefinitions }
         guard let file, let entry = UserNodeLibrary.shared.entries.first(where:{ $0.file?.path == file && $0.kind == kind }) else { return parameterDefinitions }
         return entry.parameterSpecs
     }
@@ -191,7 +194,7 @@ extension Node {
 extension Graph {
     func resolvingBlindsControls() -> Graph {
         var result = self
-        for index in result.nodes.indices where result.nodes[index].kind == .shaderEffect && result.nodes[index].controlStyle == nil {
+        for index in result.nodes.indices where result.nodes[index].kind == .shaderEffect && result.nodes[index].controlStyle == nil && result.nodes[index].fieldParameters == nil {
             guard let file = result.nodes[index].file else { continue }
             let catalogStyle = UserNodeLibrary.shared.entries.first(where:{ $0.file?.path == file })?.controlStyle
             var style = catalogStyle

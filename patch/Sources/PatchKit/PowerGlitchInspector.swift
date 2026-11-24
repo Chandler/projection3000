@@ -16,7 +16,7 @@ struct PowerGlitchInspector: View {
                 }.midiParameter(workspace:workspace,id:id,key:key)
             } else {
                 VStack(spacing:5) {
-                    HStack { Text(p.title);Spacer();Text((node?.value(key) ?? p.initial).formatted(.number.precision(.fractionLength(p.step == 1 || key == "flashMs" ? 0:2)))).font(.system(size:11,design:.monospaced)).foregroundStyle(.secondary) }
+                    HStack { Text(p.title);Spacer();Text((node?.value(key) ?? p.initial).formatted(.number.precision(.fractionLength(p.step == 1 || key == "flashMs" ? 0:2)))).font(.editorValue).foregroundStyle(.secondary) }
                     ParameterControl(value:Binding(get:{ node?.value(key) ?? p.initial },set:{ workspace.parameter(id,key,p.step == 1 ? $0.rounded():$0) }),in:p.min...p.max,step:p.step,spec:p,onEditingChanged:{ editing in
                         if editing { workspace.beginGesture() } else { workspace.endGesture("Change \(p.title)") }
                     }).tint(Color(nsColor:.patchAccent)).controlSize(.small)

@@ -1,5 +1,6 @@
 #pragma once
 #include "model.hpp"
+#include "processor_frame.hpp"
 #include <memory>
 
 namespace vj {
@@ -7,6 +8,7 @@ struct RenderHostOptions {
     int width=960, height=540, fps=60;
     bool publishOutputs=true;
     std::vector<std::string> outputs; // Empty renders all current Outputs.
+    NativeProcessorEncoder processorEncoder;
 };
 
 // The owning thread must construct, tick and destroy the host. SDL video events

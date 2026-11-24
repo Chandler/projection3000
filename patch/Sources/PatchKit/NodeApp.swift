@@ -102,7 +102,7 @@ struct NodeAppLayout<Toolbar: View,Canvas: View,Sidebar: View,Leading: View>: Vi
                 ScrollView { VStack(alignment:.leading,spacing:22) { sidebar() }.padding(20).frame(maxWidth:.infinity,alignment:.leading) }
                     .frame(width:sidebarWidth)
             }
-            if let footer { Text(footer).font(.caption).foregroundStyle(.orange).padding(8) }
+            if let footer { Text(footer).font(.editorItem).foregroundStyle(.orange).padding(8) }
         }.background(Color(nsColor:.patchPanel)).preferredColorScheme(.dark)
     }
 }
@@ -120,8 +120,8 @@ struct NodeAppSection<Content: View>: View {
     var body: some View {
         VStack(alignment:.leading,spacing:12) {
             VStack(alignment:.leading,spacing:2) {
-                Text(title.uppercased()).font(.system(size:11,weight:.semibold)).foregroundStyle(.secondary)
-                if let caption { Text(caption).font(.system(size:11)).foregroundStyle(.tertiary) }
+                Text(title.uppercased()).font(.editorHeading).foregroundStyle(.secondary)
+                if let caption { Text(caption).font(.editorItem).foregroundStyle(.tertiary) }
             }
             content()
         }
@@ -138,10 +138,22 @@ struct NodeAppParameter: View {
     private var node: Node? { workspace.graph.node(id) }
     var body: some View {
         if let spec = node?.parameterSpecs.first(where:{ $0.key == key }) {
-            if let choices = spec.choices {
+            if spec.valueKind == .color {
+                HStack {
+                    Text(title ?? spec.title)
+                    Spacer()
+                    PanelColorWell(selection:Binding(get:{
+                        PaletteColor(hex:UInt32(node?.value(key) ?? spec.initial)).displayColor
+                    }, set:{ value in
+                        if let rgb = NSColor(value).usingColorSpace(.sRGB) {
+                            workspace.parameter(id,key,Double(PaletteColor(rgb.redComponent,rgb.greenComponent,rgb.blueComponent).hex))
+                        }
+                    }),title:title ?? spec.title).frame(width:64,height:24)
+                }
+            } else if let choices = spec.choices {
                 Picker(title ?? spec.title,selection:Binding(get:{ Int((node?.value(key) ?? spec.initial).rounded()) },set:{ workspace.parameter(id,key,Double($0)) })) {
                     ForEach(choices.indices,id:\.self) { Text(choices[$0]).tag($0) }
-                }.font(.system(size:12))
+                }.font(.editorBody)
             } else {
                 VStack(alignment:.leading,spacing:5) {
                     NodeAppSliderTitle(title:title ?? spec.title,value:node?.value(key) ?? spec.initial,range:spec.min...spec.max,step:spec.step) { workspace.parameter(id,key,$0) }
@@ -170,7 +182,7 @@ struct NodeAppSliderTitle: View {
             Spacer(minLength:4)
             if showsField {
                 TextField(title,value:Binding(get:{ value },set:{ if $0.isFinite { set(min(range.upperBound,max(range.lowerBound,$0))) } }),format:.number.precision(.fractionLength(decimals)))
-                    .textFieldStyle(.roundedBorder).font(.system(size:11,design:.monospaced)).multilineTextAlignment(.trailing).frame(width:72)
+                    .textFieldStyle(.roundedBorder).font(.editorValue).multilineTextAlignment(.trailing).frame(width:72)
                     .labelsHidden().help("Type an exact value")
             }
         }

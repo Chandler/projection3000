@@ -1,0 +1,165 @@
+{
+  "version": 2,
+  "component": {
+    "id": "C1916F36-D9DF-5179-B777-BB328ED712B9",
+    "name": "Triangulate Faces",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "3A9763C3-4BED-5AB5-85B6-626303730EF0",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "name": "Collection",
+          "key": "Collection",
+          "output": true,
+          "type": "collection"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "BD8A9464-81B3-5F7D-AF98-9B772C356FCF",
+          "name": "Color",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "color"
+        },
+        {
+          "id": "33400B2B-3B23-56FC-8009-87C5BDCF8849",
+          "name": "Lines",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "lines"
+        },
+        {
+          "id": "2FF48DE8-DF43-5F3E-BFD0-216375637001",
+          "name": "Line ends",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "line_ends"
+        },
+        {
+          "id": "BF373DEB-ABC8-5075-AA6E-EB6F75E78F02",
+          "name": "Edge margin",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "edge_margin"
+        },
+        {
+          "id": "5EFA0D0E-ADE0-5E39-9283-4D6316B921CE",
+          "name": "Line thickness",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "thickness"
+        },
+        {
+          "id": "DEE71C30-5D6D-5BF3-B1AB-883CFBB678BA",
+          "name": "Line glow",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "glow"
+        },
+        {
+          "id": "E7C235A8-CC58-5227-9A15-509DA03F543C",
+          "name": "Glow radius",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "glow_radius"
+        },
+        {
+          "id": "EFB48617-B3E7-5DCE-8D51-54EE8E8A76E8",
+          "name": "Graph pulses",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "pulses"
+        },
+        {
+          "id": "43B4AB7F-0DEF-5AAF-8326-A66AE5FEC381",
+          "name": "Pulse mode",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "pulse_mode"
+        },
+        {
+          "id": "36732949-A654-57F2-B0EE-0F2CDFCB7BA3",
+          "name": "Start",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "pulse_start"
+        },
+        {
+          "id": "EECA3DA8-328F-5258-888E-9CC9637F112F",
+          "name": "End",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "pulse_end"
+        },
+        {
+          "id": "8C0FC443-9DD1-5728-B8A5-2DBC39B1A7A1",
+          "name": "Direction",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "pulse_direction"
+        },
+        {
+          "id": "29CE1E09-2A1F-5E84-87FA-B2A5BB3B057E",
+          "name": "Pulse speed",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "pulse_speed"
+        },
+        {
+          "id": "C7E4F395-12E4-5874-AF8A-03CAE8BD2FEA",
+          "name": "Pulse rate",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "pulse_rate"
+        },
+        {
+          "id": "F75E08D5-BE85-57C7-8762-D4E026806AD2",
+          "name": "Pulse width",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "pulse_width"
+        },
+        {
+          "id": "CD3BEA19-8585-564E-894A-68C233431325",
+          "name": "Pulse amount",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "pulse_amount"
+        },
+        {
+          "id": "778D3481-40A3-5BE4-92F8-2A13813D10FE",
+          "name": "Crackle",
+          "node": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+          "key": "sparkle"
+        }
+      ],
+      "preview": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C"
+    }
+  },
+  "nodes": [
+    {
+      "id": "CCBEBE67-0CEE-5ACE-A246-DC5EF1E2809C",
+      "kind": "triangulateFaces",
+      "name": "Triangulate Faces",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "color": 16777215,
+        "lines": 1,
+        "line_ends": 0,
+        "edge_margin": 0.0,
+        "thickness": 2.0,
+        "glow": 0.6,
+        "glow_radius": 16.0,
+        "pulses": 0,
+        "pulse_mode": 0,
+        "pulse_start": 0,
+        "pulse_end": 0,
+        "pulse_direction": 0,
+        "pulse_speed": 0.6,
+        "pulse_rate": 1.0,
+        "pulse_width": 0.15,
+        "pulse_amount": 1.0,
+        "sparkle": 0.0
+      },
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

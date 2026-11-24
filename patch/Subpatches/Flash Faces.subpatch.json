@@ -1,0 +1,83 @@
+{
+  "version": 2,
+  "component": {
+    "id": "C86FC412-D87C-5BB3-8BF0-08C5374B9085",
+    "name": "Flash Faces",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "332CC9EE-CFCD-54EF-AF75-98FED6D7A7A9"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "BB86980C-993C-5FE9-822E-759DB5EDC5D0",
+          "node": "332CC9EE-CFCD-54EF-AF75-98FED6D7A7A9",
+          "name": "Palette",
+          "key": "Palette",
+          "output": false,
+          "type": "palette"
+        },
+        {
+          "id": "B53522A7-3BEC-5944-B60C-FD3087C11FC8",
+          "node": "332CC9EE-CFCD-54EF-AF75-98FED6D7A7A9",
+          "name": "Collection",
+          "key": "Collection",
+          "output": true,
+          "type": "collection"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "18155197-28C5-572F-9F01-3724F94D3CAE",
+          "name": "Pattern",
+          "node": "332CC9EE-CFCD-54EF-AF75-98FED6D7A7A9",
+          "key": "pattern"
+        },
+        {
+          "id": "F71956D1-7154-5CBF-9C15-F2E6FED5B54B",
+          "name": "Speed",
+          "node": "332CC9EE-CFCD-54EF-AF75-98FED6D7A7A9",
+          "key": "speed"
+        },
+        {
+          "id": "FADD0AF0-1845-5BBE-AE3E-40BA1D693999",
+          "name": "On Time",
+          "node": "332CC9EE-CFCD-54EF-AF75-98FED6D7A7A9",
+          "key": "onTime"
+        },
+        {
+          "id": "39ABE715-61DA-5FE3-BBD1-6C92D61638B7",
+          "name": "Fade",
+          "node": "332CC9EE-CFCD-54EF-AF75-98FED6D7A7A9",
+          "key": "fade"
+        },
+        {
+          "id": "A1AE0462-CD3B-56BF-9D1E-289883FFFF7C",
+          "name": "Seed",
+          "node": "332CC9EE-CFCD-54EF-AF75-98FED6D7A7A9",
+          "key": "seed"
+        }
+      ],
+      "preview": "332CC9EE-CFCD-54EF-AF75-98FED6D7A7A9"
+    }
+  },
+  "nodes": [
+    {
+      "id": "332CC9EE-CFCD-54EF-AF75-98FED6D7A7A9",
+      "kind": "flashFaces",
+      "name": "Flash Faces",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

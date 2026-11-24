@@ -1,0 +1,84 @@
+{
+  "version": 2,
+  "component": {
+    "id": "805D09B2-37AD-5734-9ED4-A028B6DDDF7F",
+    "name": "Diffusion",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "24D69A15-250A-51D0-856F-4F2A293BEB4A"
+    ],
+    "interface": {
+      "processingInput": "185C4931-C65B-56F2-853B-E88279D76909",
+      "preview": "24D69A15-250A-51D0-856F-4F2A293BEB4A",
+      "ports": [
+        {
+          "id": "185C4931-C65B-56F2-853B-E88279D76909",
+          "node": "24D69A15-250A-51D0-856F-4F2A293BEB4A",
+          "name": "Video",
+          "key": "Video",
+          "type": "video",
+          "output": false
+        },
+        {
+          "id": "3B7DE9C0-4F6B-583B-9D60-0E7968263853",
+          "node": "24D69A15-250A-51D0-856F-4F2A293BEB4A",
+          "name": "Video",
+          "key": "Video",
+          "type": "video",
+          "output": true
+        }
+      ],
+      "parameters": [
+        {
+          "id": "5BD19BDA-C02F-54F2-9FD4-82CA3B04CF88",
+          "name": "Radius",
+          "node": "24D69A15-250A-51D0-856F-4F2A293BEB4A",
+          "key": "radius"
+        },
+        {
+          "id": "D017985C-8008-59E8-AE6F-5AECDB19EE6D",
+          "name": "Strength",
+          "node": "24D69A15-250A-51D0-856F-4F2A293BEB4A",
+          "key": "strength"
+        },
+        {
+          "id": "39F7A12B-015C-5F5E-91B0-60BE731A331B",
+          "name": "Threshold",
+          "node": "24D69A15-250A-51D0-856F-4F2A293BEB4A",
+          "key": "threshold"
+        },
+        {
+          "id": "36EC56E6-B185-56B3-BEA6-655CBA036128",
+          "name": "Soft Knee",
+          "node": "24D69A15-250A-51D0-856F-4F2A293BEB4A",
+          "key": "knee"
+        },
+        {
+          "id": "5180F4CF-589E-5B5B-93A6-AD78E40305BD",
+          "name": "Glow Saturation",
+          "node": "24D69A15-250A-51D0-856F-4F2A293BEB4A",
+          "key": "saturation"
+        }
+      ]
+    },
+    "collapsed": true
+  },
+  "nodes": [
+    {
+      "id": "24D69A15-250A-51D0-856F-4F2A293BEB4A",
+      "kind": "diffusion",
+      "name": "Diffusion",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

@@ -55,7 +55,7 @@ struct CropInspector: View {
     var body: some View {
         VStack(alignment:.leading,spacing:14) {
             HStack {
-                Text("CROP / ASPECT").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+                Text("CROP / ASPECT").font(.editorHeading).foregroundStyle(.secondary)
                 Spacer()
                 Button("Reset") { workspace.edit("Reset Crop") { graph in for p in CropStyle.parameters { try graph.setParameter(id,key:p.key,value:p.initial) } } }.buttonStyle(.plain)
             }
@@ -65,7 +65,7 @@ struct CropInspector: View {
             HStack(spacing:6) {
                 ForEach([4,2,3,7],id:\.self) { index in
                     Button { workspace.parameter(id,"aspect",Double(index)) } label: {
-                        Text(CropStyle.aspects[index]).font(.system(size:10,weight:.medium,design:.monospaced)).frame(maxWidth:.infinity).padding(.vertical,7)
+                        Text(CropStyle.aspects[index]).font(.editorItem.weight(.medium)).frame(maxWidth:.infinity).padding(.vertical,7)
                             .background((Int(node?.value("aspect") ?? 0) == index ? Color(nsColor:.patchAccent).opacity(0.25) : Color.white.opacity(0.04)),in:RoundedRectangle(cornerRadius:4))
                     }.buttonStyle(.plain)
                 }
@@ -113,7 +113,7 @@ struct CropInspector: View {
                 }.padding(.top,10)
             }
             Divider()
-            Text("OUTPUT STREAM").font(.system(size:10,weight:.medium,design:.monospaced)).foregroundStyle(.secondary)
+            Text("OUTPUT STREAM").font(.editorItem.weight(.medium)).foregroundStyle(.secondary)
             Picker("Resolution",selection:Binding(get:{ Int(node?.value("resolution") ?? 0) },set:{ workspace.parameter(id,"resolution",Double($0)) })) {
                 Text("Match input long edge").tag(0)
                 Text("HD · 720 short edge").tag(1)
@@ -130,9 +130,9 @@ struct CropInspector: View {
                     try graph.setParameter(id,key:"resolution",value:2)
                 }
             }
-            Text("Output: \(outputDimensions.width) × \(outputDimensions.height)").font(.system(size:12,weight:.semibold,design:.monospaced))
+            Text("Output: \(outputDimensions.width) × \(outputDimensions.height)").font(.editorHeading.monospacedDigit())
             Text("Downstream effects and recording use this size. Changing dimensions ends an active recording.").font(.system(size:10)).foregroundStyle(.secondary)
-            Text("OUTPUT FRAMING").font(.system(size:10,weight:.medium,design:.monospaced)).foregroundStyle(.secondary)
+            Text("OUTPUT FRAMING").font(.editorItem.weight(.medium)).foregroundStyle(.secondary)
             Picker("Output framing",selection:Binding(get:{ Int(node?.value("fit") ?? 0) },set:{ workspace.parameter(id,"fit",Double($0)) })) {
                 Text("Fit").tag(0); Text("Fill").tag(1); Text("Stretch").tag(2)
             }.pickerStyle(.segmented).labelsHidden()

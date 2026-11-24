@@ -1,11 +1,17 @@
 #include "ndi_input.hpp"
 #include "syphon_input.hpp"
 #include "native_render_graph.hpp"
+#ifdef VJ_MAPPED_METAL
+#include "mapped_trace.hpp"
+#endif
 #include "movie_mode.hpp"
 #include "playback.hpp"
 #include "static_image.hpp"
 #include "static_image_cache.hpp"
-#include "flash_faces.hpp"
+#ifdef VJ_MAPPED_METAL
+#include "mapped_surface_metal.hpp"
+#include "PatchMappedSurface.h"
+#endif
 #if __has_include("PatchCollection.h")
 #include "PatchCollection.h"
 #include "patch_particles.hpp"
@@ -65,21 +71,14 @@ GLuint make_graph_program() {
         uniform sampler2D bank_b_texture;
         uniform int effect;
         uniform float opacity;
-        uniform float seconds;
         uniform float beat;
         uniform vec2 resolution;
         uniform vec2 source_size;
         uniform vec4 p0;
         uniform vec4 p1;
         uniform vec4 p2;
-        uniform vec4 pose;
         uniform int fit_mode;
         uniform int image_blend;
-
-        vec3 hsv2rgb(vec3 c) {
-            vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0/3.0, 1.0/3.0))*6.0-3.0);
-            return c.z * mix(vec3(1.0), clamp(p-1.0,0.0,1.0), c.y);
-        }
 
         vec2 fitted_uv(vec2 uv) {
             if (fit_mode == 0 || source_size.y <= 0.0) return uv;
@@ -108,19 +107,6 @@ GLuint make_graph_program() {
             return result;
         }
 
-        float hash21(vec2 p) {
-            p = fract(p * vec2(123.34, 456.21));
-            p += dot(p, p + 45.32);
-            return fract(p.x * p.y);
-        }
-
-        float segment_distance(vec2 p, vec2 a, vec2 b) {
-            vec2 ab = b-a;
-            float along = clamp(
-                dot(p-a,ab)/max(dot(ab,ab),0.000001),0.0,1.0);
-            return length(p-(a+along*ab));
-        }
-
         void main() {
             if(effect==31){color=mix(texture(source_texture,v_uv),texture(bank_b_texture,v_uv),opacity);return;}
             vec3 result = vec3(0.0);
@@ -144,83 +130,6 @@ GLuint make_graph_program() {
                 result = clamp(result * p0.x, 0.0, 1.0);
                 if (image_blend == 1) result *= alpha;
                 if (image_blend == 2) result = mix(vec3(1.0), result, alpha);
-            } else if (effect == 1) {
-                result = p0.rgb;
-            } else if (effect == 2) {
-                vec2 centered = v_uv - 0.5;
-                float angle = p0.a;
-                float axis = dot(centered, vec2(cos(angle), sin(angle)));
-                float wave = 0.5 + 0.5 * sin(axis * 13.8 + seconds * p1.a);
-                result = mix(p0.rgb, p1.rgb, wave);
-                result *= 1.0 - p2.x * 0.4 * (1.0-exp(-fract(beat)*3.0));
-            } else if (effect == 3) {
-                vec2 p = (v_uv - 0.5) * vec2(resolution.x/resolution.y,1.0);
-                float speed = p0.x;
-                float scale = max(0.1, p0.y);
-                float value = sin((p.x*3.1 + seconds*speed)*scale)
-                    + sin((p.y*4.3 - seconds*speed*0.8)*scale)
-                    + sin((length(p)*7.0 + seconds*speed*1.2)*scale);
-                float hue = fract(value * 0.08 + seconds*0.03);
-                result = hsv2rgb(vec3(hue, 0.85, clamp(0.45+value*0.16,0.0,1.0)));
-            } else if (effect == 4) {
-                float spacing = max(4.0, p0.x);
-                vec2 pixel = v_uv * resolution;
-                float line = step(mod(pixel.x, spacing), p0.y)
-                    + step(mod(pixel.y, spacing), p0.y);
-                result = p1.rgb * min(1.0, line) * p0.z;
-            } else if (effect == 5) {
-                vec2 cells = floor(v_uv * vec2(80.0,45.0));
-                vec2 local = fract(v_uv * vec2(80.0,45.0));
-                float seed = hash21(cells);
-                float travel = fract(local.y + seconds*(0.1+seed*0.5));
-                float star = smoothstep(0.08,0.0,length(local-vec2(seed,travel)));
-                result = vec3(star) * p0.rgb * p0.a;
-            } else if (effect == 6) {
-                float angle = p0.x;
-                vec2 pixel = v_uv * resolution;
-                float coordinate = dot(pixel, vec2(-sin(angle),cos(angle)));
-                float spacing = max(1.0,p0.y);
-                float distance = abs(mod(coordinate-seconds*p0.z+spacing*0.5,
-                                         spacing)-spacing*0.5);
-                float strength = 1.0-smoothstep(p0.w*0.5,
-                                                p0.w*0.5+max(0.5,p1.a),distance);
-                result = p1.rgb * strength * p2.x;
-            } else if (effect == 7) {
-                float time = seconds*p0.x;
-                float ax = time*p0.y+pose.x, ay = time*p0.z+pose.y, az = time*p0.w+pose.z;
-                mat3 rx = mat3(1,0,0, 0,cos(ax),sin(ax),
-                               0,-sin(ax),cos(ax));
-                mat3 ry = mat3(cos(ay),0,-sin(ay), 0,1,0,
-                               sin(ay),0,cos(ay));
-                mat3 rz = mat3(cos(az),sin(az),0,
-                               -sin(az),cos(az),0, 0,0,1);
-                vec3 vertices[8];
-                vertices[0]=vec3(-1,-1,-1); vertices[1]=vec3(1,-1,-1);
-                vertices[2]=vec3(1,1,-1); vertices[3]=vec3(-1,1,-1);
-                vertices[4]=vec3(-1,-1,1); vertices[5]=vec3(1,-1,1);
-                vertices[6]=vec3(1,1,1); vertices[7]=vec3(-1,1,1);
-                vec2 points[8];
-                float pulse_scale = 1.0+p1.z*0.35
-                    *(1.0-exp(-fract(beat)*3.0));
-                for (int index=0; index<8; ++index) {
-                    vec3 q=rz*ry*rx*vertices[index];
-                    float perspective=p1.y>0.5 ? 3.0/(q.z+4.5) : 1.0;
-                    points[index]=q.xy*perspective*0.21*p1.x*pulse_scale;
-                }
-                int edge_a[12]=int[12](0,1,2,3,4,5,6,7,0,1,2,3);
-                int edge_b[12]=int[12](1,2,3,0,5,6,7,4,4,5,6,7);
-                vec2 pixel=(v_uv-0.5)*vec2(resolution.x/resolution.y,1.0);
-                float distance_to_edge=10.0;
-                for (int edge=0; edge<12; ++edge) {
-                    distance_to_edge=min(
-                        distance_to_edge,
-                        segment_distance(
-                            pixel,points[edge_a[edge]],points[edge_b[edge]]));
-                }
-                float core=1.0-smoothstep(0.003,0.008,distance_to_edge);
-                float glow=exp(
-                    -distance_to_edge*distance_to_edge/0.00045)*0.85;
-                result=vec3(core)+p2.rgb*glow;
             } else if (effect == 8) {
                 vec2 uv = fitted_uv((v_uv - p0.xy) / max(0.01, p0.z) + 0.5);
                 vec4 sample_color = vec4(0.0);
@@ -243,25 +152,6 @@ GLuint make_graph_program() {
                     ? sample_color.rgb / sample_color.a : vec3(0.0);
                 if (image_blend == 1) result *= alpha;
                 else if (image_blend == 2) result = mix(vec3(1.0), result, alpha);
-            } else if (effect == 20) {
-                vec4 original = texture(source_texture,v_uv);
-                vec3 source = original.a > 0.00001 ? original.rgb/original.a : vec3(0.0);
-                float black = p0.x, white = max(black+0.01,p0.y);
-                float gamma = max(0.05,p0.z);
-                source = clamp((source-black)/(white-black),0.0,1.0);
-                source = pow(source,vec3(1.0/gamma))*exp2(p0.w);
-                source = (source-0.5)*p1.x+0.5;
-                float luma = dot(source,vec3(0.2126,0.7152,0.0722));
-                source = mix(vec3(luma),source,p1.y);
-                result = clamp(source + p2.rgb,0.0,1.0);
-            } else if (effect == 21) {
-                vec2 p = v_uv*2.0-1.0;
-                float radial = 1.0+p0.z*dot(p,p);
-                vec2 uv = p*radial/max(0.05,p0.w)*0.5+0.5;
-                vec2 split = p0.xy/resolution;
-                result.r = texture(source_texture,uv+split).r;
-                result.g = texture(source_texture,uv).g;
-                result.b = texture(source_texture,uv-split).b;
             } else if (effect == 30) {
                 vec4 original = texture(source_texture,v_uv);
                 alpha = original.a;
@@ -273,12 +163,6 @@ GLuint make_graph_program() {
                 if (p0.z > 0.5) result *= 0.25+0.75*exp(-fract(beat)*5.0);
                 if (p0.w > 0.5) result *= mod(beat*2.0,1.0)<0.5 ? 1.0 : 0.0;
                 result=mix(result,vec3(1.0),p2.x);alpha=mix(alpha,1.0,p2.x);
-            }
-            if (effect == 20 || effect == 21) {
-                if(effect==21)result = mix(texture(source_texture, v_uv).rgb, result, opacity);
-                alpha = texture(source_texture,v_uv).a;
-                if(effect==20)result = mix(texture(source_texture,v_uv).rgb, result * alpha, opacity);
-                else result *= alpha;
             }
             if(effect==30)result *= alpha;
             color = vec4(clamp(result,0.0,1.0), alpha);
@@ -459,6 +343,7 @@ void NativeRenderGraph::ensure_geometry() {
 }
 
 void NativeRenderGraph::apply_scene(NativeScene scene) {
+    processor_errors_.clear();
     clear_projector_targets();
     audio_->apply_scene(scene);
     for(auto it=buses_.begin();it!=buses_.end();){
@@ -866,8 +751,7 @@ void NativeRenderGraph::update_sources() {
 }
 
 void NativeRenderGraph::draw_layer(
-    const NativeLayer &layer, double seconds, double beat,
-    int target_width, int target_height, GLuint input_texture) {
+    const NativeLayer &layer, int target_width, int target_height, GLuint input_texture) {
     int effect = -1;
     GLuint texture_id = input_texture ? input_texture : fallback_texture_;
     int source_width = target_width, source_height = target_height;
@@ -893,15 +777,7 @@ void NativeRenderGraph::draw_layer(
             source_width = source->width;
             source_height = source->height;
         }
-    } else if (layer.generator == "solid_color") effect = 1;
-    else if (layer.generator == "gradient") effect = 2;
-    else if (layer.generator == "plasma") effect = 3;
-    else if (layer.generator == "grid") effect = 4;
-    else if (layer.generator == "starfield") effect = 5;
-    else if (layer.generator == "scan_lines") effect = 6;
-    else if (layer.generator == "cube") effect = 7;
-    else if (layer.generator == "color_adjust") effect = 20;
-    else if (layer.generator == "lens_adjust") effect = 21;
+    }
     if (effect < 0) return;
 
     glUseProgram(program_);
@@ -911,10 +787,6 @@ void NativeRenderGraph::draw_layer(
     glUniform1i(glGetUniformLocation(program_, "source_texture"), 0);
     glUniform1i(glGetUniformLocation(program_, "effect"), effect);
     glUniform1f(glGetUniformLocation(program_, "opacity"), layer.opacity);
-    glUniform1f(glGetUniformLocation(program_, "seconds"),
-                static_cast<float>(seconds));
-    glUniform1f(glGetUniformLocation(program_, "beat"),
-                static_cast<float>(beat));
     glUniform2f(glGetUniformLocation(program_, "resolution"),
                 static_cast<float>(target_width),
                 static_cast<float>(target_height));
@@ -946,64 +818,6 @@ void NativeRenderGraph::draw_layer(
             set_vec4(program_, "p0", number(p, "x", 0.5f),
                 number(p, "y", 0.5f), number(p, "scale", 1), number(p, "gain", 1));
         }
-    } else if (effect == 1) {
-        const auto color = parse_color(p, "color");
-        set_vec4(program_, "p0", color[0], color[1], color[2], 0);
-    } else if (effect == 2) {
-        const auto a = parse_color(p, "color_a", {0.07f, 0, 0.3f});
-        const auto b = parse_color(p, "color_b", {1, 0.18f, 0.53f});
-        set_vec4(program_, "p0", a[0], a[1], a[2],
-                 number(p, "angle", 35) * static_cast<float>(M_PI / 180.0));
-        set_vec4(program_, "p1", b[0], b[1], b[2],
-                 number(p, "speed", 0.3f) * 1.57f);
-        set_vec4(program_, "p2", number(p, "breathe", 0.25f), 0, 0, 0);
-    } else if (effect == 3) {
-        set_vec4(program_, "p0", number(p, "speed", 1),
-                 number(p, "scale", 1), 0, 0);
-    } else if (effect == 4) {
-        const auto color = parse_color(p, "color", {0, 1, 0.7f});
-        set_vec4(program_, "p0", number(p, "spacing", 48),
-                 number(p, "thickness", 1), number(p, "brightness", 1), 0);
-        set_vec4(program_, "p1", color[0], color[1], color[2], 0);
-    } else if (effect == 5) {
-        const auto color = parse_color(p, "color", {1, 1, 1});
-        set_vec4(program_, "p0", color[0], color[1], color[2],
-                 number(p, "brightness", 1));
-    } else if (effect == 6) {
-        const auto color = parse_color(p, "tint", {0.2f, 0.85f, 1});
-        set_vec4(program_, "p0",
-                 number(p, "angle", 0) * static_cast<float>(M_PI / 180.0),
-                 number(p, "spacing", 110), number(p, "rate", 110),
-                 number(p, "width", 10));
-        set_vec4(program_, "p1", color[0], color[1], color[2],
-                 number(p, "blur", 12));
-        set_vec4(program_, "p2", number(p, "amount", 0.85f), 0, 0, 0);
-    } else if (effect == 7) {
-        const float radians = static_cast<float>(M_PI / 180.0);
-        set_vec4(program_, "pose", number(p, "pose_x", 0)*radians,
-                 number(p, "pose_y", 0)*radians, number(p, "pose_z", 0)*radians, 0);
-        const auto glow = parse_color(p, "glow", {0.47f, 0.75f, 1});
-        set_vec4(program_, "p0", number(p, "speed", 1),
-                 number(p, "rotate_x", 0), number(p, "rotate_y", 1),
-                 number(p, "rotate_z", 0));
-        set_vec4(program_, "p1", number(p, "size", 1),
-                 text(p, "projection", "orthographic") == "perspective"
-                     ? 1.0f : 0.0f,
-                 number(p, "pulse", 0), 0);
-        set_vec4(program_, "p2", glow[0], glow[1], glow[2], 0);
-    } else if (effect == 20) {
-        set_vec4(program_, "p0", number(p, "black", 0),
-                 number(p, "white", 1), number(p, "gamma", 1),
-                 number(p, "exposure", 0));
-        set_vec4(program_, "p1", number(p, "contrast", 1),
-                 number(p, "saturation", 1), number(p, "hue", 0), 0);
-        set_vec4(program_, "p2", number(p, "temperature", 0) * 0.13f,
-                 number(p, "tint", 0) * -0.08f,
-                 number(p, "temperature", 0) * -0.13f, 0);
-    } else if (effect == 21) {
-        set_vec4(program_, "p0", number(p, "split_x", 0),
-                 number(p, "split_y", 0), number(p, "fisheye", 0),
-                 number(p, "zoom", 1));
     }
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
@@ -1054,13 +868,28 @@ void NativeRenderGraph::draw_master(
 
 void NativeRenderGraph::draw_collection(const NativeBus &bus, const NativeLayer &layer,
                                       GLuint texture, int width, int height, bool geometry, double seconds,bool localBackdrop) {
+#ifdef VJ_MAPPED_METAL
+    if(geometry && layer.collection_geometry=="trace"){
+        static const std::vector<float> face={-1,-1,0,0,1,0,1,0, 1,-1,1,0,1,0,1,0, 1,1,1,1,1,0,1,0,
+                                             -1,-1,0,0,1,0,1,0, 1,1,1,1,1,0,1,0, -1,1,0,1,1,0,1,0};
+        const auto mesh=bus.collection.value("traceVertices",face);
+        const double elapsed=bus.clock.playing?std::chrono::duration<double>(SteadyClock::now()-scene_received_at_).count():0.;
+        vj::mapped_trace::draw(mapped_metal_,layer.params.value("_patch_recipe",SceneJson::object()),bus.collection,
+                               mesh,width,height,layer.blend,layer.opacity,bus.clock.beat+elapsed*bus.clock.bpm/60.);
+        return;
+    }
+#endif
     if (!collection_program_) {
         const char *vs=R"GLSL(#version 330 core
 layout(location=0) in vec2 p;layout(location=1) in vec3 uvq;layout(location=2) in vec3 data;
 layout(location=3) in vec4 inkClipData;layout(location=4) in vec4 inkColorData;
 out vec3 uv;out vec3 graph;out vec4 inkClip;out vec4 inkColor;
 void main(){gl_Position=vec4(p,0,1);uv=uvq;graph=data;inkClip=inkClipData;inkColor=inkColorData;})GLSL";
-        const char *fs=R"GLSL(#version 330 core
+        const char *fs="#version 330 core\n"
+#ifdef VJ_MAPPED_METAL
+            "#define VJ_MAPPED_METAL 1\n"
+#endif
+            R"GLSL(
 in vec3 uv;in vec3 graph;in vec4 inkClip;in vec4 inkColor;out vec4 color;
 uniform sampler2D source;uniform int shape;uniform bool premultiplied,fitClip;
 uniform int mediaFit;uniform float mediaSourceAspect;
@@ -1085,6 +914,7 @@ vec3 glassBackdrop(vec2 p){
 uniform float coreWidth,glowRadius,glowAmount,brightness,centerGlow,falloff;
 uniform bool pulses;uniform float seconds,pulseSpeed,pulseRate,pulseWidth,pulseAmount,sparkle,routeLength;
 uniform int direction;
+#ifndef VJ_MAPPED_METAL
 uniform int traceKind,traceMode;uniform bool traceReverse,traceSequence,traceSync,traceEnd,traceReflect,traceSingleColor;
 uniform float traceWidth,traceOffset,traceBeat,traceSpeed,traceBeatSpeed,traceTail,traceDrag,traceRainbow;
 uniform float traceRate,tracePerBeat,traceAttack,traceRelease,traceOnTime,traceFloor,traceCurve,traceSpread,tracePulse,traceBreathe;
@@ -1146,6 +976,7 @@ vec3 traceColor(float x,float identity){
     float body=max(clamp(1-d/traceTail,0,1),traceDrag*exp(-d/max(.005,traceTail*(.2+traceDrag))));
     return mix(traceTint,tracePalette(x+seconds*.04),traceRainbow)*body;
 }
+#endif
 uniform float flowSpeed,flowDensity,flowWidth,flowFoam,flowTurbulence;
 uniform int sphereTrails;uniform float sphereSpeed,sphereTail,sphereWidth,sphereSpread,sphereFadeStart,sphereFadeAmount;uniform vec3 spherePose,sphereRotate;
 vec3 rotateX(vec3 p,float a){float c=cos(a),s=sin(a);return vec3(p.x,c*p.y-s*p.z,s*p.y+c*p.z);}
@@ -1251,7 +1082,9 @@ void main(){
         }
         c=texture(source,st);
         if(premultiplied&&c.a>0.00001)c.rgb/=c.a;
-    }else if(shape==5){
+    }
+#ifndef VJ_MAPPED_METAL
+    else if(shape==5){
         vec2 p=clamp(uv.xy/uv.z,0,1);
         float along=p.x;
         c.a=1;
@@ -1264,7 +1097,10 @@ void main(){
         if(traceSequence)along=(graph.x/uv.z+along)/max(1,graph.y/uv.z);
         if(traceReverse)along=1-along;
         c.rgb=traceColor(traceOffset==0?along:fract(along+traceOffset),mod(traceSeed+(traceSequence?0.0:floor(graph.z/uv.z+.5)),65521.0));
-    }else if(shape==2 || shape==6){
+    }
+#endif
+#ifndef VJ_MAPPED_METAL
+    else if(shape==2 || shape==6){
         float endDistance=max(max(-uv.x,uv.x-uv.z),0.0);
         float distance=length(vec2(endDistance,uv.y));
         float core=1.0-smoothstep(max(0.0,coreWidth*.5-.65),coreWidth*.5+.65,distance);
@@ -1311,7 +1147,9 @@ void main(){
             energy=max(energy,band*max(tail,head)*brightness);
         }
         c.rgb=tint*brightness;c.a=clamp(energy,0.0,1.0);
-    }else if(shape==12){
+    }
+#endif
+    else if(shape==12){
         vec2 point=uv.xy/uv.z,faceUV=inkClip.xy+point*inkClip.zw;
         mat2 toPoint=mat2(dFdx(point),dFdy(point));
         if(any(lessThan(faceUV,vec2(0)))||any(greaterThan(faceUV,vec2(1))))discard;
@@ -1373,13 +1211,16 @@ void main(){
     }else if(shape==8){
         if(roundPoints && length(uv.xy/uv.z*2.0-1.0)>1.0)discard;
         c=vec4(graph,faceAlpha);
-    }else if(shape==3 || shape==7 || shape==13){
+    }
+#ifndef VJ_MAPPED_METAL
+    else if(shape==3 || shape==7 || shape==13){
         vec2 p=uv.xy/uv.z*2.0-1.0;
         float center=pow(max(0.0,(1.0-p.x*p.x)*(1.0-p.y*p.y)),falloff);
         if(shape==7 || (shape==13 && roundPoints)){float r2=dot(p,p);if(r2>1.0)discard;center=pow(max(0.0,1.0-r2),falloff);}
         if(shape==13)c.rgb=graph;
         c.a=brightness*mix(1.0,center,centerGlow);
     }
+#endif
     c.a*=opacity;
     if(blend==1)c.rgb*=c.a;else if(blend==2)c.rgb=mix(vec3(1),c.rgb,c.a);
     color=c;
@@ -1397,8 +1238,14 @@ void main(){
     }
     SceneJson params = geometry ? layer.params : SceneJson::object();
     const bool patchTrace=layer.generator=="patch_trace";
-    const auto traceRecipe=patchTrace?params.value("_patch_recipe",SceneJson::object()):SceneJson::object();
-    if(patchTrace){if(traceRecipe.value("kind",std::string{})!="lightningPulses")return;params=traceRecipe.value("params",SceneJson::object());seconds=traceRecipe.value("time",0.);}
+    const auto recipe=params.value("_patch_recipe",SceneJson::object());
+    const auto operation=recipe.value("kind",std::string{});
+    const bool mappedSurface=operation=="triangulateFaces"||operation=="boxWaterfall"||operation=="sphereGimbal"||operation=="boxEdges";
+    const int traceKind=operation=="traceSnake"?0:operation=="traceRainbow"?1:operation=="tracePulse"?2:operation=="traceSolid"?3:operation=="lightningPulses"?4:-1;
+    if(patchTrace){
+        if(traceKind<0)return;
+        params=recipe.value("params",SceneJson::object());seconds=recipe.value("time",0.);
+    }else if(mappedSurface)params=recipe.value("params",SceneJson::object());
 
     glUseProgram(collection_program_);glBindVertexArray(collection_vao_);glBindBuffer(GL_ARRAY_BUFFER,collection_vbo_);
     glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture?texture:fallback_texture_);
@@ -1445,7 +1292,7 @@ void main(){
     scalar("flowWidth",params.value("width",.35f));
     scalar("flowFoam",params.value("foam",.6f));
     scalar("flowTurbulence",params.value("turbulence",.35f));
-    if(layer.generator=="sphere_gimbal"){
+    if(operation=="sphereGimbal"){
         glUniform1i(glGetUniformLocation(collection_program_,"sphereTrails"),std::clamp(int(std::round(params.value("trails",16.0f))),1,32));
         scalar("sphereSpeed",params.value("speed",2.0f));
         scalar("sphereTail",params.value("tail",.10f));
@@ -1474,10 +1321,10 @@ void main(){
         auto flag=[&](const char* key,bool v){glUniform1i(glGetUniformLocation(collection_program_,key),v);};
         const auto mode=route.value("mode",std::string("perimeter"));
         glUniform1i(glGetUniformLocation(collection_program_,"traceMode"),mode=="horizontal"?1:mode=="vertical"?2:0);
-        glUniform1i(glGetUniformLocation(collection_program_,"traceKind"),layer.generator=="trace_rainbow"?1:layer.generator=="trace_pulse"?2:layer.generator=="trace_solid"?3:(layer.generator=="trace_lightning"||patchTrace)?4:0);
+        glUniform1i(glGetUniformLocation(collection_program_,"traceKind"),traceKind);
         flag("traceSequence",route.value("scope",std::string("face"))=="collection");flag("traceReverse",route.value("reverse",false));
         std::vector<float> traceColors;
-        if(patchTrace)for(const auto& c:traceRecipe.value("colors",SceneJson::array())){if(traceColors.size()>=256*3)break;traceColors.insert(traceColors.end(),{c.value("r",0.f),c.value("g",0.f),c.value("b",0.f)});}
+        if(patchTrace)for(const auto& c:recipe.value("colors",SceneJson::array())){if(traceColors.size()>=256*3)break;traceColors.insert(traceColors.end(),{c.value("r",0.f),c.value("g",0.f),c.value("b",0.f)});}
         glUniform1i(glGetUniformLocation(collection_program_,"tracePaletteCount"),int(traceColors.size()/3));
         if(!traceColors.empty())glUniform3fv(glGetUniformLocation(collection_program_,"traceColors"),int(traceColors.size()/3),traceColors.data());
         scalar("traceNodeSeed",patchTrace?params.value("seed",0.f):0.f);
@@ -1505,8 +1352,18 @@ void main(){
     else if(layer.blend=="screen")glBlendFuncSeparate(GL_ONE,GL_ONE_MINUS_SRC_COLOR,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
     else if(layer.blend=="multiply")glBlendFuncSeparate(GL_DST_COLOR,GL_ZERO,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
     else glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
+    float routeSpan=1;
     auto draw=[&](const std::vector<float> &vertices,int shape,int stride=8){
         if(vertices.empty())return;
+#ifdef VJ_MAPPED_METAL
+        if(mappedSurface && shape!=1){
+            const char* function=shape==2?"mappedTriangulate":shape==4?"mappedWaterfall":shape==6?"mappedBoxEdges":"mappedSphere";
+            auto constants=vj::mapped_surface::uniforms(params,color,thickness,glow,static_cast<float>(seconds),routeSpan);
+            mapped_metal_.draw(patchMappedSurfaceMSL,function,vertices.data(),vertices.size(),&constants,sizeof(constants),
+                                  nullptr,0,width,height,layer.blend,layer.opacity);
+            return;
+        }
+#endif
         glUniform1i(glGetUniformLocation(collection_program_,"shape"),shape);
         glBufferData(GL_ARRAY_BUFFER,vertices.size()*sizeof(float),vertices.data(),GL_DYNAMIC_DRAW);
         if(stride==16){
@@ -1540,7 +1397,7 @@ void main(){
                                       -1,-1,0,0,1,0,1,0, 1,1,1,1,1,0,1,0, -1,1,0,1,1,0,1,0};
         draw(bus.collection.value("traceVertices",face),5);return;
     }
-    if(layer.generator=="box_edges"){
+    if(operation=="boxEdges"){
         std::vector<float> vertices;
         for(const auto &edge:bus.collection.value("boxEdges",SceneJson::array())){
             const float x=edge[0][0].get<float>()*width,y=edge[0][1].get<float>()*height;
@@ -1557,7 +1414,7 @@ void main(){
     }
     const auto& cards=bus.card_vertices;
     #ifdef VJ_PATCH_COLLECTION
-    if(layer.collection_geometry=="patch"){
+    if(layer.collection_geometry=="patch"&&!mappedSurface){
         const auto recipe=params.value("_patch_recipe",SceneJson::object());if(recipe.empty())return;
         auto p=recipe.value("params",SceneJson::object());const bool gate=recipe.value("kind",std::string{})=="surfaceGate";
         auto colors=recipe.value("colors",SceneJson::array());if(colors.empty())return;
@@ -1657,6 +1514,25 @@ void main(){
             if(ink)draw(inkVertices,12,16);
             scalar("faceAlpha",1);return;
         }
+#ifdef VJ_MAPPED_METAL
+        if(operation=="glowFaces"||operation=="flashFaces"){
+            auto vertices=cards;
+            const auto faces=bus.collection.value("cardFaceIndices",std::vector<int>{});
+            for(size_t i=0;i<vertices.size()/8;++i)vertices[i*8+5]=float(i/6<faces.size()?faces[i/6]:int(i/6));
+            std::vector<std::array<float,4>> palette;palette.reserve(colors.size());
+            for(const auto& c:colors)palette.push_back({c.value("r",0.f),c.value("g",0.f),c.value("b",0.f),1});
+            const bool glowFace=operation=="glowFaces";
+            const std::array<std::array<float,4>,3> fx={{
+                {float(seconds),p.value("pattern",0.f),p.value("speed",2.f),p.value("seed",1.f)},
+                {glowFace?p.value("center_glow",1.f):p.value("onTime",.8f),glowFace?p.value("falloff",1.5f):p.value("fade",0.f),p.value("brightness",1.f),0},
+                {float(bus.collection.value("faceIds",SceneJson::array()).size()),float(palette.size()),round_points?1.f:0.f,
+                 bus.collection.contains("metaGraph")&&!bus.collection.value("graphReplace",false)?1.f:0.f}
+            }};
+            mapped_metal_.draw(patchMappedSurfaceMSL,glowFace?"mappedGlowFaces":"mappedFlashFaces",vertices.data(),vertices.size(),
+                                  fx.data(),sizeof(fx),palette.data(),palette.size()*sizeof(palette[0]),width,height,layer.blend,layer.opacity);
+            return;
+        }
+#else
         if(recipe.value("kind",std::string{})=="glowFaces"){
             auto vertices=cards;const auto indices=bus.collection.value("cardFaceIndices",std::vector<int>{});
             for(size_t card=0;card<vertices.size()/48;++card){int face=card<indices.size()?indices[card]:int(card);const auto& rgb=colors[patch_glow_sample(face,int(colors.size()),1).color];
@@ -1665,6 +1541,7 @@ void main(){
             scalar("brightness",std::clamp(p.value("brightness",.7f),0.f,1.f));scalar("centerGlow",std::clamp(p.value("center_glow",1.f),0.f,1.f));scalar("falloff",std::clamp(p.value("falloff",1.5f),.25f,6.f));
             draw(vertices,13);return;
         }
+#endif
         PatchCollectionConfig config{int(p.value("pattern",0.)),p.value("speed",2.),p.value("onTime",.8),p.value("fade",0.),p.value("brightness",1.),uint32_t(p.value("seed",1.))};
         auto vertices=cards;const auto faceIndices=bus.collection.value("cardFaceIndices",std::vector<int>{});const int count=bus.collection.value("faceIds",SceneJson::array()).size();
         const bool pulse=recipe.value("kind",std::string{})=="graphPulse",meta=bus.collection.contains("metaGraph");
@@ -1685,27 +1562,13 @@ void main(){
         if(!pulse&&!meta&&!fitFaces)draw(vertices,gate?10:8);scalar("faceAlpha",1);return;
     }
 #endif
-    if(layer.generator=="flash_faces"){
-        auto vertices=cards;
-        const auto palette=flash_faces::palette(params,palette_sources_);
-        const auto face_indices=bus.collection.value("cardFaceIndices",std::vector<int>{});
-        const int total=bus.collection.value("faceIds",std::vector<std::string>{}).size();
-        for(std::size_t card=0;card<vertices.size()/48;++card){
-            const int face=card<face_indices.size()?face_indices[card]:int(card);
-            const auto rgb=flash_faces::sample(params,palette,face,total?total:int(vertices.size()/48),seconds);
-            for(int vertex=0;vertex<6;++vertex)
-                for(int channel=0;channel<3;++channel)vertices[card*48+vertex*8+5+channel]=rgb[channel];
-        }
-        draw(vertices,8);return;
-    }
-    if(layer.generator=="glow_faces"){draw(cards,round_points?7:3);return;}
-    if(layer.generator=="box_waterfall"){
+    if(operation=="boxWaterfall"){
         draw(bus.collection.value("flowVertices",std::vector<float>{}),4);return;
     }
-    if(layer.generator=="sphere_gimbal"){
+    if(operation=="sphereGimbal"){
         draw(bus.collection.value("sphereVertices",std::vector<float>{}),9);return;
     }
-    if(layer.generator!="triangulate_faces"||!params.value("lines",true))return;
+    if(operation!="triangulateFaces"||!params.value("lines",true))return;
     // Clip the entire soft line footprint, not just its center path, against
     // the union of face polygons. Lines and halos never jump inside cards.
     // Box faces meet without gaps: their topology links must run on the
@@ -1780,7 +1643,7 @@ void main(){
     const bool route_only=params.value("pulse_mode",std::string("wave"))=="route";
     std::set<std::pair<int,int>> route;
     for(int node=destination;previous[node]>=0;node=previous[node])route.insert(std::minmax(node,previous[node]));
-    scalar("routeLength",std::max(.001f,distances[route_only?destination:farthest]));
+    routeSpan=std::max(.001f,distances[route_only?destination:farthest]);scalar("routeLength",routeSpan);
     std::vector<float> vertices;std::size_t index=0;
     for(const auto &edge:bus.collection.at("edges")){
         int ia=edge[0].get<int>(),ib=edge[1].get<int>();auto a=centers.at(ia),b=centers.at(ib);
@@ -1853,6 +1716,27 @@ void NativeRenderGraph::render_bus(
     std::string base_media_group;
     for (const auto &layer : bus.layers) {
         if (!layer.enabled) continue;
+        if(layer.generator=="patch_adjustment"){
+            if(!has_base || layer.opacity<=0)continue;
+            const auto source=layer.params.value("source",std::string{});
+            const auto context=name+"/"+layer.source_id+"/"+std::to_string(layer.id);
+            std::string error;
+            if(source.empty())error="Adjustment source is missing";
+#ifdef VJ_MAPPED_METAL
+            else if(!processor_encoder_)error="No Patch processor host is connected";
+            else {
+                const int next=1-target.active;
+                if(mapped_metal_.process(processor_encoder_,source,context,seconds,target.framebuffers[target.active],
+                                         target.framebuffers[next],target.width,target.height,layer.blend,layer.opacity,error)){
+                    target.active=next;++processor_frames_;processor_errors_.erase(context);
+                }
+            }
+#else
+            else error="Patch adjustments require the Metal processor backend";
+#endif
+            if(!error.empty())processor_errors_[context]=error;
+            continue;
+        }
         // Mixed Patch outputs carry video as a surfaceGate leaf. Without
         // collection geometry it remains an ordinary video layer, so free
         // mapped surfaces and the Out preview still receive the video.
@@ -1869,21 +1753,7 @@ void NativeRenderGraph::render_bus(
             draw_collection(bus,layer,0,target.width,target.height,true,seconds);
             has_base=true;continue;
         }
-        const bool adjustment =
-            layer.generator == "color_adjust"
-            || layer.generator == "lens_adjust";
-        if ((has_base || adjustment) && layer.opacity <= 0.0f) continue;
-        if (adjustment) {
-            if (!has_base) continue;
-            const int next = 1 - target.active;
-            glBindFramebuffer(GL_FRAMEBUFFER, target.framebuffers[next]);
-            glViewport(0, 0, target.width, target.height);
-            glDisable(GL_BLEND);
-            draw_layer(layer, seconds, beat, target.width, target.height,
-                       target.textures[target.active]);
-            target.active = next;
-            continue;
-        }
+        if (has_base && layer.opacity <= 0.0f) continue;
         if (!bus.collection.empty()) {
             const auto& recipe=layer.params.value("_patch_recipe",SceneJson::object());
             const bool glass=typed && recipe.value("kind",std::string{})=="graphInkFlow"
@@ -1920,7 +1790,7 @@ void NativeRenderGraph::render_bus(
                 if(layer.media_vertices)isolated.params["fit"]="stretch";
                 if (!layer.vector.empty()) {
                     if (!vector_layer_renderer_ || !vector_layer_renderer_(isolated,seconds,beat,target.width,target.height)) continue;
-                } else draw_layer(isolated,seconds,beat,target.width,target.height);
+                } else draw_layer(isolated,target.width,target.height);
                 glBindFramebuffer(GL_FRAMEBUFFER,target.framebuffers[target.active]);
                 glViewport(0,0,target.width,target.height);
                 auto mapped=layer;
@@ -1960,7 +1830,7 @@ void NativeRenderGraph::render_bus(
             glEnable(GL_BLEND);
             glBlendEquation(GL_FUNC_ADD);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            draw_layer(base, seconds, beat, target.width, target.height, vector_texture);
+            draw_layer(base, target.width, target.height, vector_texture);
             has_base = true;
             continue;
         }
@@ -1978,7 +1848,7 @@ void NativeRenderGraph::render_bus(
         } else {
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         }
-        draw_layer(layer, seconds, beat, target.width, target.height, vector_texture);
+        draw_layer(layer,  target.width, target.height, vector_texture);
     }
     if (name != "preview" && !bus.bank) draw_master(bus, target);
     ++target.sequence;
@@ -2315,7 +2185,12 @@ SceneJson NativeRenderGraph::diagnostics() const {
         }
         sources.push_back(std::move(item));
     }
-    return {{"frames", rendered_frames_}, {"sourceCount", sources_.size()},
+    return {
+#ifdef VJ_MAPPED_METAL
+        {"mappedMetalDraws",mapped_metal_.draws()},{"mappedMetalError",mapped_metal_.lastError()},
+#endif
+        {"processorFrames",processor_frames_},{"processorErrors",processor_errors_},
+        {"frames", rendered_frames_}, {"sourceCount", sources_.size()},
         {"warmSourceCount",std::count_if(sources_.begin(),sources_.end(),[](const auto& entry){return entry.second->syphon&&!entry.second->active;})},
         {"projectorBackdropCopies",projector_backdrop_copies_},{"patchResolutionCacheHits",patch_resolution_hits_},{"patchResolutionRebuilds",patch_resolution_rebuilds_},
         {"decoderUploads", decoder_uploads_}, {"monitorReadbacks", monitor_readbacks_},

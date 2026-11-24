@@ -1,0 +1,129 @@
+{
+  "version": 2,
+  "component": {
+    "id": "E350B5E1-4D8B-5A78-8D22-4C6421CFDE14",
+    "name": "Lens Adjust",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "1799CBEA-F12B-598E-BB4A-6BBF009501D2"
+    ],
+    "interface": {
+      "processingInput": "C02FFAF1-CAF6-5C01-A4F8-150C8FC485AB",
+      "preview": "1799CBEA-F12B-598E-BB4A-6BBF009501D2",
+      "ports": [
+        {
+          "id": "C02FFAF1-CAF6-5C01-A4F8-150C8FC485AB",
+          "node": "1799CBEA-F12B-598E-BB4A-6BBF009501D2",
+          "name": "Video",
+          "key": "Video",
+          "type": "video",
+          "output": false
+        },
+        {
+          "id": "4BA50718-19E3-5631-9400-5999DFDEA0A1",
+          "node": "1799CBEA-F12B-598E-BB4A-6BBF009501D2",
+          "name": "Video",
+          "key": "Video",
+          "type": "video",
+          "output": true
+        }
+      ],
+      "parameters": [
+        {
+          "id": "F1FC69E8-7A14-5B65-B91D-0F1235A98809",
+          "node": "1799CBEA-F12B-598E-BB4A-6BBF009501D2",
+          "name": "RGB Split X",
+          "key": "split_x"
+        },
+        {
+          "id": "57DA41C8-B0A5-52C1-A835-B8F02794B49F",
+          "node": "1799CBEA-F12B-598E-BB4A-6BBF009501D2",
+          "name": "RGB Split Y",
+          "key": "split_y"
+        },
+        {
+          "id": "8BC27D4A-FFC4-56F7-8648-75DB722931D8",
+          "node": "1799CBEA-F12B-598E-BB4A-6BBF009501D2",
+          "name": "Fisheye / Barrel",
+          "key": "fisheye"
+        },
+        {
+          "id": "10B4E1DE-067B-5734-9BDC-D7B13EEE6BCC",
+          "node": "1799CBEA-F12B-598E-BB4A-6BBF009501D2",
+          "name": "Zoom",
+          "key": "zoom"
+        },
+        {
+          "id": "F2E5C68F-0374-522A-AFFD-089E060E0D1D",
+          "node": "1799CBEA-F12B-598E-BB4A-6BBF009501D2",
+          "name": "Edges",
+          "key": "edge"
+        }
+      ]
+    },
+    "collapsed": true
+  },
+  "nodes": [
+    {
+      "id": "1799CBEA-F12B-598E-BB4A-6BBF009501D2",
+      "kind": "shaderEffect",
+      "name": "Lens Adjust",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true,
+      "file": "bundle:User Nodes/Composition/Lens Adjust.metal",
+      "fieldParameters": [
+        {
+          "key": "split_x",
+          "title": "RGB Split X",
+          "min": -120,
+          "max": 120,
+          "initial": 0,
+          "unit": "px"
+        },
+        {
+          "key": "split_y",
+          "title": "RGB Split Y",
+          "min": -120,
+          "max": 120,
+          "initial": 0,
+          "unit": "px"
+        },
+        {
+          "key": "fisheye",
+          "title": "Fisheye / Barrel",
+          "min": -1.2,
+          "max": 1.2,
+          "initial": 0
+        },
+        {
+          "key": "zoom",
+          "title": "Zoom",
+          "min": 0.35,
+          "max": 2.5,
+          "initial": 1
+        },
+        {
+          "key": "edge",
+          "title": "Edges",
+          "min": 0,
+          "max": 2,
+          "initial": 0,
+          "choices": [
+            "Reflect",
+            "Wrap",
+            "Black"
+          ]
+        }
+      ]
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

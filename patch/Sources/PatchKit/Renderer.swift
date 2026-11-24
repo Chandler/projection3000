@@ -187,6 +187,7 @@ final class Renderer {
     lazy var midiGraph = MIDIGraphEngine(instruments:audioGraph.instrumentMIDI)
     private let profileVideoRenderer: ProfileVideoRenderer
     private let rasterSynthRenderer: RasterSynthRenderer
+    private let vectorArtRenderer: VectorArtRenderer
     private let voltageRenderer: VoltageRenderer
     private let oscilloscopeRenderer: OscilloscopeRenderer
     private let voltageFluidRenderer: VoltageFluidRenderer
@@ -244,8 +245,9 @@ final class Renderer {
     private var renderStatus: [UUID:String] = [:]
     private var liveStreams: [UUID:LiveStreamSource] = [:]
     private var liveStreamFrames: [UUID:CVMetalTexture] = [:]
-    private var ndiInputs: [UUID:PatchNDIReceiver] = [:]
-    private var ndiInputFrames: [UUID:CVMetalTexture] = [:]
+    private var syphonInputs: [String:PatchSyphonInput] = [:]
+    private var ndiInputs: [String:PatchNDIReceiver] = [:]
+    private var ndiInputFrames: [String:CVMetalTexture] = [:]
     var renderTime = 0.0
     private var playing = true
     var status: [UUID:String] { stateLock.withLock { publishedStatus } }
@@ -288,7 +290,7 @@ final class Renderer {
         frameTimer?.cancel(); frameTimer = nil
         for view in views.allObjects { view.isPaused = true }
         renderQueue.sync {
-            syphon.removeAll(); outputRuntime.publishers.removeAll(); ndi.removeAll(); cameras.removeAll(); media.removeAll(); liveStreams.removeAll(); liveStreamFrames.removeAll(); ndiInputs.removeAll(); ndiInputFrames.removeAll()
+            syphon.removeAll(); outputRuntime.publishers.removeAll(); ndi.removeAll(); cameras.removeAll(); media.removeAll(); liveStreams.removeAll(); liveStreamFrames.removeAll(); syphonInputs.removeAll(); ndiInputs.removeAll(); ndiInputFrames.removeAll()
             previewDemand.removeAll(); demandedNodes.removeAll()
             stateLock.withLock { publishedDemand = [:]; outputSnapshot = []; publishedGPU = 0 }
         }
@@ -296,6 +298,95 @@ final class Renderer {
     }
     deinit { frameTimer?.cancel() }
     private var lastTime = CACurrentMediaTime()
+    private let adjustmentAlpha: MTLComputePipelineState
+    private let adjustmentDither: DitherRenderer
+    private let adjustmentDiffusion: DiffusionRenderer
+    private var adjustmentNodes: [UUID:Node] = [:]
+
+    func encodeAdjustment(_ source: String, input: MTLTexture, output: MTLTexture,
+                          command: MTLCommandBuffer, time: Double) throws {
+        try renderQueue.sync {
+            guard let graph = plannedGraph else { throw GraphError("Patch graph is loading") }
+            let nodes = try graph.adjustmentChain(source: source)
+            adjustmentDither.retain(Set(graph.nodes.map(\.id)))
+            adjustmentDiffusion.retain(Set(graph.nodes.map(\.id)))
+            let size = MTLSize(width: input.width, height: input.height, depth: 1)
+            let tile = MTLSize(width: 16, height: 16, depth: 1)
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float,
+                                                                      width: size.width, height: size.height, mipmapped: false)
+            descriptor.storageMode = .private
+            descriptor.usage = [.shaderRead, .shaderWrite]
+            func scratch() throws -> MTLTexture {
+                guard let texture = device.makeTexture(descriptor: descriptor) else { throw GraphError("Could not allocate adjustment texture") }
+                return texture
+            }
+            func alpha(_ source: MTLTexture, _ target: MTLTexture, restore: Bool) throws {
+                guard let encoder = command.makeComputeCommandEncoder() else { throw GraphError("Could not encode adjustment") }
+                var mode: UInt32 = restore ? 1 : 0
+                encoder.setComputePipelineState(adjustmentAlpha)
+                encoder.setTexture(input, index: 0)
+                encoder.setTexture(source, index: 1)
+                encoder.setTexture(target, index: 2)
+                encoder.setBytes(&mode, length: MemoryLayout<UInt32>.size, index: 0)
+                encoder.dispatchThreads(size, threadsPerThreadgroup: tile)
+                encoder.endEncoding()
+            }
+            let first = try scratch(), second = try scratch()
+            try alpha(input, first, restore: false)
+            var prior = first, target = second
+            for original in nodes {
+                let node = adjustmentNodes[original.id] ?? original
+                guard node.enabled else { continue }
+                switch node.kind {
+                case .dither:
+                    guard adjustmentDither.encode(command, node: node, source: prior, target: target) else {
+                        throw GraphError("Could not encode Dither")
+                    }
+                case .diffusion:
+                    adjustmentDiffusion.encode(command, node: node, source: prior, target: target)
+                case .shaderEffect:
+                    let resource = shader(node)
+                    guard let pipeline = resource?.pipeline, let encoder = command.makeComputeCommandEncoder() else {
+                        throw GraphError(resource?.error ?? "Compiling " + node.name)
+                    }
+                    let specs = node.fieldParameters
+                    var t = Float(time * (specs?.first(where: { $0.scalesFieldTime == true }).map { node.value($0.key) } ?? (specs == nil ? node.value("speed") : 1)))
+                    var controls = [SIMD4<Float>](repeating: .zero, count: 8)
+                    if let specs {
+                        for (i, spec) in specs.enumerated() { controls[i/4][i%4] = Float(node.value(spec.key)) }
+                        controls[3].w = t
+                    } else {
+                        controls[0] = .init(Float(node.value("p1")), Float(node.value("p2")), Float(node.value("p3")), Float(node.value("p4")))
+                        controls[1].x = Float(node.value("mix"))
+                    }
+                    encoder.setComputePipelineState(pipeline)
+                    encoder.setTexture(target, index: 0)
+                    encoder.setTexture(prior, index: 1)
+                    encoder.setTexture(black, index: 2)
+                    encoder.setBytes(&t, length: MemoryLayout<Float>.size, index: 0)
+                    controls.withUnsafeBytes { encoder.setBytes($0.baseAddress!, length: $0.count, index: 1) }
+                    encoder.dispatchThreads(size, threadsPerThreadgroup: tile)
+                    encoder.endEncoding()
+                default:
+                    guard let encoder = command.makeComputeCommandEncoder() else { throw GraphError("Could not encode adjustment") }
+                    var uniforms = Uniforms()
+                    uniforms.videoAdjustment(node)
+                    encoder.setComputePipelineState(pipeline)
+                    encoder.setTexture(prior, index: 0)
+                    encoder.setTexture(black, index: 1)
+                    encoder.setTexture(target, index: 2)
+                    encoder.setBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
+                    var audio: Float = 0
+                    encoder.setBytes(&audio, length: MemoryLayout<Float>.size, index: 1)
+                    encoder.dispatchThreads(size, threadsPerThreadgroup: tile)
+                    encoder.endEncoding()
+                }
+                swap(&prior, &target)
+            }
+            try alpha(prior, output, restore: true)
+        }
+    }
+
     init() throws {
         guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else { throw GraphError("A Metal GPU is required.") }
         self.device = device; self.queue = queue
@@ -308,6 +399,10 @@ final class Renderer {
         voltageFluidRenderer = try VoltageFluidRenderer(device:device)
         projectorRenderer = try ProjectorRenderer(device:device)
         let library = try device.makeLibrary(source: String(contentsOf: url), options: nil)
+        adjustmentAlpha = try device.makeComputePipelineState(function: library.makeFunction(name: "adjustmentAlpha")!)
+        adjustmentDither = try DitherRenderer(device: device, library: library)
+        adjustmentDiffusion = try DiffusionRenderer(device: device, library: library)
+        vectorArtRenderer = try VectorArtRenderer(device:device,library:library)
         faceReplacementRenderer = try FaceReplacementRenderer(device:device,library:library)
         poseRenderer = try PoseRenderer(device:device,library:library)
         faceBoxRenderer = try FaceBoxRenderer(device:device,library:library)
@@ -484,11 +579,15 @@ final class Renderer {
             geometries = geometries.filter { ids.contains($0.key) }; shaders = shaders.filter { ids.contains($0.key) }
             meshDetails = meshDetails.filter { ids.contains($0.key) }
             audioVisualizers = audioVisualizers.filter { ids.contains($0.key) }
-            voltageRenderer.prune(ids);oscilloscopeRenderer.prune(ids);voltageFluidRenderer.prune(ids);projectorRenderer.prune(ids)
+            vectorArtRenderer.prune(ids);voltageRenderer.prune(ids);oscilloscopeRenderer.prune(ids);voltageFluidRenderer.prune(ids);projectorRenderer.prune(ids)
             textSources = textSources.filter { ids.contains($0.key) }
             cameras = cameras.filter { id, _ in graph.node(id)?.enabled == true && graph.node(id)?.kind == .webcam }
             liveStreams = liveStreams.filter { ids.contains($0.key) };liveStreamFrames = liveStreamFrames.filter { ids.contains($0.key) }
-            ndiInputs = ndiInputs.filter { ids.contains($0.key) };ndiInputFrames = ndiInputFrames.filter { ids.contains($0.key) }
+            let selectedSyphon = Set(graph.nodes.filter { $0.enabled && $0.kind == .syphonIn }.compactMap(\.deviceID))
+            syphonInputs = syphonInputs.filter { selectedSyphon.contains($0.key) }
+            let ndiNames = Set(graph.nodes.filter { $0.enabled && $0.kind == .ndiIn }.compactMap { $0.text?.trimmingCharacters(in:.whitespacesAndNewlines) })
+            ndiInputs = ndiInputs.filter { ndiNames.contains($0.key) }
+            ndiInputFrames = ndiInputFrames.filter { ndiNames.contains($0.key) }
             media = media.filter { ids.contains($0.key) }; targets = targets.filter { ids.contains($0.key) }
             syphon = syphon.filter { id, _ in graph.node(id)?.enabled == true && graph.node(id)?.kind == .syphon }
             ndi = ndi.filter { id, _ in graph.node(id)?.enabled == true && graph.node(id)?.kind == .ndi }
@@ -507,6 +606,7 @@ final class Renderer {
         if let preview { raster.insert(preview) }
         var previewLayers = raster
         var layerPreviewFrames: [UUID:MTLTexture] = [:]
+        var vectorArtPathDemand = Set<UUID>()
         var required = Set<UUID>()
         let nodes = routing.nodes, dependencies = routing.incoming, sockets = routing.sockets
         // Resolve controls before walking image dependencies. A zero MUX input
@@ -565,6 +665,7 @@ final class Renderer {
                 }
                 if (node.kind == .videoPalette || node.kind == .layerMux || node.kind == .ab) && (node.kind == .videoPalette || previewLayers.contains(id) || raster.contains(id)) { previewLayers.insert(edge.source); raster.insert(edge.source) }
                 if nodes[edge.source]?.kind.outputType(at:edge.outputIndex) == .video { raster.insert(edge.source) }
+                if edge.outputIndex == 0, nodes[edge.source]?.kind.vectorArtModule != nil { vectorArtPathDemand.insert(edge.source) }
                 require(edge.source)
             }
             if node.enabled { for (key,binding) in node.modulations ?? [:] where binding.enabled && usesModulation(node,key) { require(binding.source) } }
@@ -593,6 +694,7 @@ final class Renderer {
         var profileFrames: [UUID:ProfileVideoFrame] = [:]
         var frameReferences: [SignalOutlet:UUID] = [:]
         var fields: [SignalOutlet:FieldSignal] = [:]
+        adjustmentNodes = resolvedNodes
         var effectiveNodes: [UUID:Node] = [:]
         var staticVersions: [UUID:UInt64] = [:]
         var staticCacheHits=0
@@ -789,6 +891,19 @@ final class Renderer {
                 renderStatus[node.id] = "Collection · \(Int(node.value("previewFaces"))) preview surfaces"
                 continue
             }
+            if node.kind.isMappedSurface {
+                outputRuntime.recipes[node.id]=["version":1,"kind":node.kind.rawValue,"params":node.mappedRecipeParameters]
+                do {
+                    if raster.contains(node.id){textures[node.id]=try outputRuntime.surfacePreview.render(node,time:renderTime,command:command)}
+                    renderStatus[node.id]="Mapped collection"
+                } catch {renderStatus[node.id]=error.localizedDescription}
+                continue
+            }
+            if node.kind.isMappedTrace {
+                let (texture,recipe)=outputRuntime.traceRuntime.mapped(node,time:renderTime,command:command,preview:raster.contains(node.id))
+                outputRuntime.recipes[node.id]=recipe;textures[node.id]=texture ?? black
+                renderStatus[node.id]="Trace";continue
+            }
             if node.kind == .lightningPulses {
                 let palette=incoming[0].map { paletteValues[$0] ?? .empty }
                 let phase=sockets[node.id]?[1].flatMap { controlValue($0.source,$0.outputIndex) }
@@ -961,6 +1076,18 @@ final class Renderer {
                 targets[node.id] = device.makeTexture(descriptor: desc)
             }
             guard let target = targets[node.id] else { continue }
+            if node.kind.vectorArtModule != nil {
+                do {
+                    let path = try vectorArtRenderer.render(node,target:target,command:command,time:renderTime,wantRaster:raster.contains(node.id),wantPath:vectorArtPathDemand.contains(node.id))
+                    audioGraph.setVectorArtPath(path,id:node.id)
+                    if raster.contains(node.id) { textures[node.id] = target }
+                    renderStatus[node.id] = "Vector strokes"
+                } catch {
+                    audioGraph.setVectorArtPath(nil,id:node.id)
+                    renderStatus[node.id] = error.localizedDescription
+                }
+                continue
+            }
             var staticSource: MTLTexture?
             var upstreamVersion: UInt64 = 0
             if node.kind == .image { staticSource=source(node)?.texture }
@@ -1156,7 +1283,14 @@ final class Renderer {
                 if let pipeline = resource?.pipeline, let enc = command.makeComputeCommandEncoder() {
                     var time = Float(self.renderTime * ([.scene,.projectionDots].contains(node.kind) ? 1 : node.value("speed")))
                     var controls = node.kind == .shaderEffect ? [SIMD4<Float>(Float(node.value("p1")),Float(node.value("p2")),Float(node.value("p3")),Float(node.value("p4"))), SIMD4<Float>(Float(node.value("mix")),0,0,0)] : [SIMD4<Float>(Float(node.value("speed")),Float(node.value("orbit")),Float(node.value("zoom")),Float(node.value("spread"))),SIMD4<Float>(Float(node.value("shadows")),0,0,0)]
-                    if node.kind == .shaderEffect {
+                    if node.kind == .shaderEffect,let specs = node.fieldParameters {
+                        // Keep the supplied shader's declaration order, four scalar lanes per vector.
+                        controls = Array(repeating:.zero,count:4)
+                        for (i,spec) in specs.enumerated() { controls[i/4][i%4] = Float(node.value(spec.key)) }
+                        let rate = specs.first(where:{ $0.scalesFieldTime == true }).map { node.value($0.key) } ?? 1
+                        time = Float(self.renderTime * rate)
+                        controls[3].w = time
+                    } else if node.kind == .shaderEffect {
                         if node.hasBlindsControls && node.value("animation") > 0 { controls[1].x = 1 }
                         controls += [
                             SIMD4<Float>(Float(node.value("animation")),Float(node.value("variation")),Float(node.value("pulseWidth")),Float(node.value("trail"))),
@@ -1239,17 +1373,25 @@ final class Renderer {
                     if let cv=liveStreamFrames[node.id] { retainedCV.append(cv);first=CVMetalTextureGetTexture(cv) ?? black }
                     renderStatus[node.id]=resource.status
                 }
+            case .syphonIn:
+                uniforms.mode.x = 1; uniforms.b.x = 0; uniforms.b.y = 1; first = black
+                if let key = node.deviceID, let selection = SyphonInputSource.decode(key) {
+                    let input = syphonInputs[key] ?? PatchSyphonInput(selection:selection,device:device)
+                    syphonInputs[key] = input
+                    first = input.currentTexture() ?? black
+                    renderStatus[node.id] = input.status
+                } else { renderStatus[node.id] = "Choose a Syphon source" }
             case .ndiIn:
                 uniforms.mode.x = 1; uniforms.b.x = 0; first = black
                 let source=(node.text ?? "").trimmingCharacters(in:.whitespacesAndNewlines)
-                if ndiInputs[node.id]?.source != source { ndiInputs[node.id]=source.isEmpty ? nil : PatchNDIReceiver(source:source);ndiInputFrames.removeValue(forKey:node.id) }
-                if let receiver=ndiInputs[node.id] {
+                if !source.isEmpty && ndiInputs[source] == nil { ndiInputs[source] = PatchNDIReceiver(source:source) }
+                if let receiver=ndiInputs[source] {
                     if let pixel=receiver.copyNewFrame() {
                         var cv: CVMetalTexture?
                         CVMetalTextureCacheCreateTextureFromImage(nil,cache,pixel,nil,.bgra8Unorm,CVPixelBufferGetWidth(pixel),CVPixelBufferGetHeight(pixel),0,&cv)
-                        if let cv { ndiInputFrames[node.id]=cv }
+                        if let cv { ndiInputFrames[source]=cv }
                     }
-                    if let cv=ndiInputFrames[node.id] { retainedCV.append(cv);first=CVMetalTextureGetTexture(cv) ?? black }
+                    if let cv=ndiInputFrames[source] { retainedCV.append(cv);first=CVMetalTextureGetTexture(cv) ?? black }
                     renderStatus[node.id]=receiver.status
                 } else { renderStatus[node.id]=PatchNDIReceiver.available ? "Choose an NDI source" : "NDI runtime unavailable" }
             case .webcam:
@@ -1318,10 +1460,7 @@ final class Renderer {
                     first = resource.texture ?? black
                     renderStatus[node.id] = resource.error ?? (resource.texture == nil ? resource.loading : "Ready")
                 }
-            case .halftone:
-                uniforms.mode.x = 9
-                uniforms.a = .init(Float(node.value("cell")),Float(node.value("angle") * .pi/180),Float(node.value("shape")),Float(node.value("mono")))
-                uniforms.b = .init(Float(node.value("contrast")),Float(node.value("mix")),0,0)
+            case .halftone: uniforms.videoAdjustment(node)
             case .modulation:
                 uniforms.mode.x = 10
                 uniforms.a = .init(Float(node.value("period")),Float(node.value("depth")),Float(node.value("width")),Float(node.value("angle") * .pi/180))
@@ -1397,13 +1536,7 @@ final class Renderer {
                 uniforms.b = .init(Float(node.value("fit")),Float(node.value("background")),Float(node.value("flipX")),Float(node.value("flipY")))
             case .ab: uniforms.mode.x = 3; uniforms.a = .init(Float(node.value("mode") == 1 ? (node.value("mix") < 0.5 ? 0 : 1) : node.value("mix")),0,0,0)
             case .blend: uniforms.mode.x = 3; uniforms.a = .init(Float(node.value("mix")), Float(node.value("mode")),0,0); uniforms.b = .init(Float(node.value("x")),Float(node.value("y")),Float(node.value("scale")),0)
-            case .color:
-                uniforms.mode.x = 4
-                uniforms.mode.y = UInt32(node.value("invert"))
-                uniforms.a = .init(Float(node.value("exposure")),Float(node.value("saturation")),Float(node.value("contrast")),Float(node.value("brightness")))
-                uniforms.b = .init(Float(node.value("blackPoint")),Float(node.value("whitePoint")),Float(node.value("gamma")),Float(node.value("hue") * .pi/180))
-                uniforms.c = .init(Float(node.value("outBlack")),Float(node.value("outWhite")),Float(node.value("temperature")),Float(node.value("tint")))
-                uniforms.d.x = Float(node.value("mix"))
+            case .color: uniforms.videoAdjustment(node)
             default: break
             }
             audioSamples.withUnsafeBytes { encoder.setBytes($0.baseAddress!,length:$0.count,index:1) }

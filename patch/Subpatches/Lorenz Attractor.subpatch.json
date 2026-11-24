@@ -1,0 +1,113 @@
+{
+  "version": 2,
+  "component": {
+    "id": "C72B1924-62FE-55EB-B5A1-9331FFC475B6",
+    "name": "Lorenz Attractor",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "2131A0F0-7102-50B3-88F8-11D51A5DBF7F"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "DFEF4E25-3EDC-558E-B447-2513FB5342A2",
+          "node": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+          "key": "Video",
+          "name": "Video",
+          "type": "video",
+          "output": true
+        },
+        {
+          "id": "31A6EB90-26F0-50FE-B5B0-517B8C697D87",
+          "node": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+          "key": "Path",
+          "name": "Path",
+          "type": "vectorPath",
+          "output": true
+        }
+      ],
+      "parameters": [
+        {
+          "id": "D4A2D65B-33E9-5B4F-A572-F7F83C8D8D31",
+          "name": "Speed",
+          "node": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+          "key": "speed"
+        },
+        {
+          "id": "90C6C499-58D4-5135-822C-EE8B591F3E82",
+          "name": "Length",
+          "node": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+          "key": "length"
+        },
+        {
+          "id": "4B001255-CB76-5B26-91F4-42B8798EE408",
+          "name": "Zoom",
+          "node": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+          "key": "zoom"
+        },
+        {
+          "id": "81B2D95D-CB4A-59F2-AB15-CFEAB68622C6",
+          "name": "Rotation speed",
+          "node": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+          "key": "rotation"
+        },
+        {
+          "id": "1A5203E9-BAC3-5A1F-93B4-15583A8313DC",
+          "name": "Camera tilt",
+          "node": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+          "key": "tilt"
+        },
+        {
+          "id": "654BAA06-5399-5B2D-B18C-49EB5AD26AE9",
+          "name": "Line width",
+          "node": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+          "key": "line_width"
+        },
+        {
+          "id": "A4D9F807-BDB6-58D7-B161-344248AC305A",
+          "name": "Brightness",
+          "node": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+          "key": "brightness"
+        },
+        {
+          "id": "A27069F6-4463-51DE-A194-C0650D6A7696",
+          "name": "Color",
+          "node": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+          "key": "color"
+        },
+        {
+          "id": "2B39F311-E8E7-5349-B6EB-E368304CEF17",
+          "name": "Orbit seed",
+          "node": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+          "key": "seed"
+        },
+        {
+          "id": "2892A757-4DBD-5BCC-95B6-A47D6290809E",
+          "name": "Rotation direction",
+          "node": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+          "key": "rotation_direction"
+        }
+      ],
+      "preview": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F"
+    }
+  },
+  "nodes": [
+    {
+      "id": "2131A0F0-7102-50B3-88F8-11D51A5DBF7F",
+      "kind": "vectorLorenz",
+      "name": "Lorenz Attractor",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

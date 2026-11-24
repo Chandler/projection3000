@@ -39,7 +39,7 @@ struct ChannelColorsInspector: View {
     var body: some View {
         VStack(alignment:.leading,spacing:14) {
             HStack {
-                Text("CHANNEL COLORS").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+                Text("CHANNEL COLORS").font(.editorHeading).foregroundStyle(.secondary)
                 Spacer()
                 Button("Reset") {
                     workspace.edit("Reset Channel Colors") { graph in

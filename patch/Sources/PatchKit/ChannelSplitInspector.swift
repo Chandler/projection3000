@@ -37,7 +37,7 @@ struct ChannelSplitInspector: View {
     var body: some View {
         VStack(alignment:.leading,spacing:14) {
             HStack {
-                Text("CHANNEL SPLIT").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+                Text("CHANNEL SPLIT").font(.editorHeading).foregroundStyle(.secondary)
                 Spacer()
                 Button("Reset") { preset(0) }.buttonStyle(.plain)
             }
@@ -66,7 +66,7 @@ struct ChannelSplitInspector: View {
                 } label: {
                     HStack { Circle().fill(colors[i]).frame(width:8,height:8); Text(names[i]); Spacer()
                         Text("\(Int(node?.value("x\(i)") ?? 0)), \(Int(node?.value("y\(i)") ?? 0)) px")
-                            .font(.system(size:10,design:.monospaced)).foregroundStyle(.secondary)
+                            .font(.editorCaption.monospacedDigit()).foregroundStyle(.secondary)
                     }
                 }
             }

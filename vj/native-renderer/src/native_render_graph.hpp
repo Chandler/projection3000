@@ -3,6 +3,10 @@
 #define GL_GLEXT_PROTOTYPES
 #include <SDL2/SDL_opengl.h>
 
+#ifdef VJ_MAPPED_METAL
+#include "mapped_metal.hpp"
+#endif
+#include "processor_frame.hpp"
 #include "media_decoder.hpp"
 #include "live_capture.hpp"
 #include <functional>
@@ -38,6 +42,7 @@ public:
 
     void apply_scene(NativeScene scene);
     void set_bus_sizes(std::map<std::string, std::array<int, 2>> sizes);
+    void set_processor_encoder(NativeProcessorEncoder encoder){processor_encoder_=std::move(encoder);}
     void set_patch_outputs(SceneJson sources) { patch_outputs_ = std::move(sources); }
     const SceneJson& patch_outputs() const { return patch_outputs_; }
     void set_palette_sources(SceneJson sources) { palette_sources_ = std::move(sources); }
@@ -73,12 +78,18 @@ private:
     SourceNode *source_for(const NativeLayer &layer);
     void update_sources();
     void render_bus(const std::string &name, const NativeBus &bus);
-    void draw_layer(const NativeLayer &layer, double seconds, double beat,
+    void draw_layer(const NativeLayer &layer,
                     int target_width, int target_height,
                     GLuint input_texture = 0);
     void draw_master(const NativeBus &bus, BusTarget &target);
     void draw_collection(const NativeBus &bus, const NativeLayer &layer,
                          GLuint texture, int width, int height, bool geometry, double seconds,bool localBackdrop=true);
+#ifdef VJ_MAPPED_METAL
+    MappedMetalRenderer mapped_metal_;
+#endif
+    NativeProcessorEncoder processor_encoder_;
+    std::map<std::string,std::string> processor_errors_;
+    uint64_t processor_frames_=0;
     GLuint collection_program_ = 0, collection_vao_ = 0, collection_vbo_ = 0;
     static std::string source_key(const NativeLayer &layer);
 

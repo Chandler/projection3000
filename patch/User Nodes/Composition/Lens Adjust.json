@@ -1,0 +1,49 @@
+{
+  "name": "Lens Adjust",
+  "kind": "shaderEffect",
+  "file": "Lens Adjust.metal",
+  "parameters": [
+    {
+      "key": "split_x",
+      "title": "RGB Split X",
+      "min": -120,
+      "max": 120,
+      "initial": 0,
+      "unit": "px"
+    },
+    {
+      "key": "split_y",
+      "title": "RGB Split Y",
+      "min": -120,
+      "max": 120,
+      "initial": 0,
+      "unit": "px"
+    },
+    {
+      "key": "fisheye",
+      "title": "Fisheye / Barrel",
+      "min": -1.2,
+      "max": 1.2,
+      "initial": 0
+    },
+    {
+      "key": "zoom",
+      "title": "Zoom",
+      "min": 0.35,
+      "max": 2.5,
+      "initial": 1
+    },
+    {
+      "key": "edge",
+      "title": "Edges",
+      "min": 0,
+      "max": 2,
+      "initial": 0,
+      "choices": [
+        "Reflect",
+        "Wrap",
+        "Black"
+      ]
+    }
+  ]
+}

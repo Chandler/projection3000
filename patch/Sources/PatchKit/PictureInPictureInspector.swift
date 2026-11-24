@@ -54,7 +54,7 @@ struct PictureInPictureInspector: View {
     var body: some View {
         VStack(alignment:.leading,spacing:14) {
             HStack {
-                Text("PICTURE IN PICTURE").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+                Text("PICTURE IN PICTURE").font(.editorHeading).foregroundStyle(.secondary)
                 Spacer()
                 Button("Reset") { set(Dictionary(uniqueKeysWithValues:PictureInPictureStyle.parameters.map { ($0.key,$0.initial) })) }.buttonStyle(.plain)
             }

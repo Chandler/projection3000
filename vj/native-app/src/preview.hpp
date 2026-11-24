@@ -1,8 +1,10 @@
 #pragma once
 #import <AppKit/AppKit.h>
 #include "model.hpp"
+@class PatchEditorController;
 @interface VJPreview : NSOpenGLView
 - (instancetype)initWithFrame:(NSRect)frame model:(vj::Model*)model;
+- (void)setProcessorController:(PatchEditorController*)controller;
 - (void)setSingleMonitor:(BOOL)single;
 - (void)setMonitorBank:(NSString*)bank;
 - (void)setBus:(NSString*)bus;

@@ -4,14 +4,16 @@ import CoreGraphics
 
 /// Outline generation happens only when text or geometry settings change.
 /// Core Text provides shaping and fallback fonts; the encoder samples a cached path.
-enum VectorTextGeometry {
-    static func make(_ node: Node) -> VectorPath {
-        let text=String((node.text ?? "PATCH").prefix(128))
+public enum VectorTextGeometry {
+    public static func make(_ node: Node, font suppliedFont: CTFont? = nil) -> VectorPath {
+        let laser = suppliedFont != nil
+        let content = node.text ?? (laser ? "YOUR NAME" : "PATCH")
+        let text = String((laser ? content.replacingOccurrences(of:"\\n",with:"\n") : content).prefix(laser ? 256 : 128))
         let fonts=["HelveticaNeue","Menlo-Regular","TimesNewRomanPSMT"]
-        let font=CTFontCreateWithName(fonts[min(2,max(0,Int(node.value("font"))))] as CFString,100,nil)
+        let font=suppliedFont ?? CTFontCreateWithName(fonts[min(2,max(0,Int(node.value("font"))))] as CFString,100,nil)
         let attributes=[NSAttributedString.Key(kCTFontAttributeName as String):font]
         let path=CGMutablePath()
-        for (row,text) in text.components(separatedBy:.newlines).prefix(8).enumerated() {
+        for (row,text) in text.components(separatedBy:.newlines).prefix(laser ? 256 : 8).enumerated() {
             let line=CTLineCreateWithAttributedString(NSAttributedString(string:text,attributes:attributes))
             let width=CTLineGetTypographicBounds(line,nil,nil,nil)
             for run in CTLineGetGlyphRuns(line) as! [CTRun] {
@@ -23,14 +25,14 @@ enum VectorTextGeometry {
                 let actualFont=(CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName] as! CTFont
                 for i in 0..<count {
                     guard let outline=CTFontCreatePathForGlyph(actualFont,glyphs[i],nil) else { continue }
-                    let transform=CGAffineTransform(translationX:positions[i].x-width/2,y:positions[i].y-Double(row)*100*node.value("lineSpacing"))
+                    let transform=CGAffineTransform(translationX:positions[i].x-width/2,y:positions[i].y-Double(row)*(laser ? 120 : 100*node.value("lineSpacing")))
                     path.addPath(outline,transform:transform)
                 }
             }
         }
         let bounds=path.boundingBoxOfPath
         guard !bounds.isNull,max(bounds.width,bounds.height)>0 else { return VectorPath(vertices:[]) }
-        let scale=Float(node.value("size")*2/max(bounds.width,bounds.height))
+        let scale: Float = laser ? 1/96 : Float(node.value("size")*2/max(bounds.width,bounds.height))
         let center=SIMD2(Float(bounds.midX),Float(bounds.midY))
         var contours=[[SIMD2<Float>]](),line=[SIMD2<Float>](),current=SIMD2<Float>.zero
         func point(_ p: CGPoint) -> SIMD2<Float> { SIMD2(Float(p.x),Float(p.y)) }

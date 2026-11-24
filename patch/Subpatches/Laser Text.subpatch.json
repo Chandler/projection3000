@@ -1,0 +1,114 @@
+{
+  "version": 2,
+  "component": {
+    "id": "7F523A16-9DE7-5C78-A179-9394918D6352",
+    "name": "Laser Text",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "FF20020E-8F1F-5412-B0CC-B9BE9FA628EF",
+          "node": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+          "key": "Video",
+          "name": "Video",
+          "type": "video",
+          "output": true
+        },
+        {
+          "id": "BBBDBA02-E6A4-5119-9127-BB8E1804D9A2",
+          "node": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+          "key": "Path",
+          "name": "Path",
+          "type": "vectorPath",
+          "output": true
+        }
+      ],
+      "parameters": [
+        {
+          "id": "2C9E201D-819D-5F8D-9DCE-28BA1783CBD0",
+          "name": "Font",
+          "node": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+          "key": "font"
+        },
+        {
+          "id": "0829B913-D1ED-52A3-B074-F4FED1CF61CA",
+          "name": "Laser color",
+          "node": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+          "key": "color"
+        },
+        {
+          "id": "F6878DA9-00EB-5438-A110-96FAC71FAD5C",
+          "name": "Core width",
+          "node": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+          "key": "line_width"
+        },
+        {
+          "id": "75E199A6-DA93-53DB-9AD4-069A6CAA8466",
+          "name": "Glow radius",
+          "node": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+          "key": "glow_width"
+        },
+        {
+          "id": "7481D33B-91E7-5634-BCB7-387FDC96AF30",
+          "name": "Brightness",
+          "node": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+          "key": "brightness"
+        },
+        {
+          "id": "E2E7BA0F-BA1F-5572-BB73-4DC869C0D86D",
+          "name": "Size",
+          "node": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+          "key": "size"
+        },
+        {
+          "id": "B39CF2EE-BDE3-5639-869E-2C9753A09203",
+          "name": "X",
+          "node": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+          "key": "x"
+        },
+        {
+          "id": "C4C19B87-A75D-5D0D-8981-238A6BACB493",
+          "name": "Y",
+          "node": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+          "key": "y"
+        },
+        {
+          "id": "7C271E3C-F5B8-5AE7-B2AC-75479381777E",
+          "name": "Pulse",
+          "node": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+          "key": "pulse"
+        },
+        {
+          "id": "EA4F794C-74E8-5A58-AA66-802526D63D6A",
+          "name": "Pulse speed",
+          "node": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+          "key": "speed"
+        }
+      ],
+      "preview": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF"
+    }
+  },
+  "nodes": [
+    {
+      "id": "5DB74F78-3783-5BE7-B8B6-13310DF6CCDF",
+      "kind": "laserLettering",
+      "name": "Laser Text",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true,
+      "text": "YOUR NAME"
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

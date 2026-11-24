@@ -9,7 +9,6 @@ struct CollectionRendering {
     // Derived bus -> (ordinary Out source, renderer collection context).
     std::map<std::string,std::pair<std::string,nlohmann::json>> contexts;
 };
-nlohmann::json collectionEffectCatalog();
 std::string collectionBusName(const std::string& mappingId,const std::string& collectionId);
 nlohmann::json particleFaceChart(const nlohmann::json& face,const nlohmann::json& rect,double aspect=16.0/9.0,double metricAspect=0);
 nlohmann::json collectionGeometry(const nlohmann::json& document);

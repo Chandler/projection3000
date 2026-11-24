@@ -88,7 +88,7 @@ kernel void process(texture2d<float, access::sample> source [[texture(0)]],
             if (length((uv-0.5)*float2(size.x/size.y,1)) < 0.23) col += float3(0.25,0.1,0.02);
         }
     } else if (op == 1) {
-        col = fitSample(source, float2(p.b.x > 0.5 ? 1-uv.x : uv.x,uv.y), size.x/size.y);
+        col = fitSample(source, float2(p.b.x > 0.5 ? 1-uv.x : uv.x,p.b.y > 0.5 ? 1-uv.y : uv.y), size.x/size.y);
     } else if (op == 7) {
         // Fit the rotated source bounds, then invert the transform for sampling.
         // Positive angles rotate clockwise in image coordinates; 90° keeps a
@@ -876,4 +876,52 @@ kernel void graphCloudParticlePreview(texture2d<float,access::write> output [[te
 
  alpha*=u.extra.x;
  output.write(float4(rgb*alpha+float3(.012)*(1-alpha),1),pos);
+}
+
+struct ArtStrokeVertex { float4 pointWidth,core,glow; };
+struct ArtStroke { ArtStrokeVertex a,b; };
+struct ArtVarying { float4 position [[position]]; float2 local; float span; float2 radius; float4 core,glow; float2 butt; };
+vertex ArtVarying vectorArtVertex(uint vid [[vertex_id]],uint iid [[instance_id]],const device ArtStroke* lines [[buffer(0)]],constant float4& size [[buffer(1)]]) {
+    constexpr float2 corners[6]={{0,-1},{1,-1},{0,1},{0,1},{1,-1},{1,1}};
+    ArtStroke s=lines[iid];float2 dir=(s.b.pointWidth.xy-s.a.pointWidth.xy)*size.xy;
+    float span=length(dir);float2 axis=span>0.00001?dir/span:float2(1,0);
+    float2 c=corners[vid];float2 widths=mix(s.a.pointWidth.zw,s.b.pointWidth.zw,c.x)*size.y*float2(0.5,1.0);
+    float support=max(widths.x,0.3)+max(0.0,widths.y)*1.85+1.0;
+    float along=mix(-support,span+support,c.x),side=c.y*support;
+    float2 pixel=s.a.pointWidth.xy*size.xy+axis*along+float2(-axis.y,axis.x)*side;
+    ArtVarying out;out.position=float4(pixel/size.xy*float2(2,-2)+float2(-1,1),0,1);
+    out.local=float2(along,side);out.span=span;out.radius=widths;out.core=mix(s.a.core,s.b.core,c.x);
+    out.glow=mix(s.a.glow,s.b.glow,c.x);out.butt=float2(0);
+    if(size.z>0.5) {
+        out.butt.x=(iid==0 || any(lines[iid-1].b.pointWidth.xy!=s.a.pointWidth.xy))?1.0:0.0;
+        out.butt.y=(iid+1>=uint(size.w) || any(lines[iid+1].a.pointWidth.xy!=s.b.pointWidth.xy))?1.0:0.0;
+    }return out;
+}
+fragment float4 vectorArtFragment(ArtVarying v [[stage_in]],constant int& layer [[buffer(0)]]) {
+    float endDistance=max(-v.local.x,v.local.x-v.span);
+    float distance=length(float2(max(0.0,endDistance),v.local.y));
+    float aa=max(fwidth(distance),0.7);
+    float caps=(v.butt.x>0.5?smoothstep(-aa,aa,v.local.x):1.0)*(v.butt.y>0.5?smoothstep(-aa,aa,v.span-v.local.x):1.0);
+    float coreRadius=max(0.3,v.radius.x);
+    float4 color=layer==1?v.core:v.glow;
+    float coverage;
+    if(layer==1) coverage=1.0-smoothstep(coreRadius-aa,coreRadius+aa,distance);
+    else {
+        if(v.radius.y<=0.0) discard_fragment();
+        float d=max(distance-coreRadius-v.radius.y*0.275,0.0)/max(0.001,v.radius.y*0.5);
+        coverage=exp(-0.5*d*d);
+    }
+    float alpha=clamp(color.a*coverage*caps,0.0,1.0);return float4(color.rgb*alpha,alpha);
+}
+
+kernel void adjustmentAlpha(texture2d<float, access::read> original [[texture(0)]],
+                            texture2d<float, access::read> source [[texture(1)]],
+                            texture2d<float, access::write> target [[texture(2)]],
+                            constant uint &restore [[buffer(0)]],
+                            uint2 point [[thread_position_in_grid]]) {
+    if (point.x >= target.get_width() || point.y >= target.get_height()) return;
+    float alpha = original.read(point).a;
+    float3 rgb = source.read(point).rgb;
+    target.write(restore ? float4(rgb * alpha, alpha)
+                         : float4(alpha > 0.00001 ? rgb / alpha : float3(0), 1), point);
 }

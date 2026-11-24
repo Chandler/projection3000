@@ -54,6 +54,7 @@ extension NodeKind {
 
     private var inputSockets: [Socket] {
         switch self {
+        case .traceSnake,.tracePulse,.traceRainbow,.traceSolid,.triangulateFaces,.boxWaterfall,.sphereGimbal,.boxEdges: return []
         case .fieldRender:
             return [.init("Field", .field, 0)]
         case .fieldMix:
@@ -70,10 +71,10 @@ extension NodeKind {
         case .rasterSynth, .audioPlugin, .oscilloscope, .audioEnvelope, .audioGain, .audioMono, .audioFilter,
              .audioEQ, .audioOutput, .waveform, .audioVisualizer, .recordAudio:
             return [.init("Audio", .audio, 0)]
-        case .fieldShader, .metroSequencer, .midiIn, .arpeggiator, .vectorShape, .vectorText, .fluidShape, .audioInput,
+        case .vectorCube, .laserLettering, .lightningCellGrid, .vectorScanLines, .vectorLorenz, .slimeMold, .fieldShader, .metroSequencer, .midiIn, .arpeggiator, .vectorShape, .vectorText, .fluidShape, .audioInput,
              .posterText, .apc40, .powerGlitch, .liveStream, .palette, .dotColors, .flipDots, .cellularField,
              .waterfallField, .streakField, .streakGlow, .blockerField, .dataStream, .microphone, .lfo, .noise,
-             .scene, .pattern, .image, .video, .text, .webcam, .audio, .lorenz, .shader, .ndiIn:
+             .scene, .pattern, .image, .video, .text, .webcam, .audio, .lorenz, .shader, .ndiIn, .syphonIn:
             return []
         case .loopmother:
             return [.init("MIDI", .midi, 0), .init("Instrument", .audio, 1)]
@@ -178,7 +179,7 @@ extension NodeKind {
              .oscilloscope, .posterText, .posterComposer, .powerGlitch, .liveStream, .mux, .projectionDots,
              .shaderEffect, .ledMatrix, .pictureInPicture, .channelSplit, .channelColors, .crop, .poseRender,
              .faceReplace, .faceBoxes, .scene, .pattern, .image, .text, .webcam, .waveform, .audioVisualizer,
-             .render, .shader, .dither, .halftone, .diffusion, .modulation, .crt, .blend, .color, .ndiIn:
+             .render, .shader, .dither, .halftone, .diffusion, .modulation, .crt, .blend, .color, .ndiIn, .syphonIn:
             return [.init("Video", .video, 0)]
         case .fieldShader, .fieldMix, .flashCells, .cellularField, .waterfallField, .streakField, .streakGlow, .blockerField,
              .dataStream:
@@ -209,6 +210,8 @@ extension NodeKind {
             ]
         case .midiOut, .projector, .publishPalette, .audioOutput, .window, .syphon, .ndi, .record, .recordAudio:
             return []
+        case .vectorCube, .laserLettering, .lightningCellGrid, .vectorScanLines, .vectorLorenz, .slimeMold:
+            return [.init("Path", .vectorPath, 0), .init("Video", .video, 1)]
         case .vectorShape, .vectorText, .fluidShape:
             return [.init("Path", .vectorPath, 0)]
         case .voltageEncoder:
@@ -218,7 +221,7 @@ extension NodeKind {
                 .init("X", .audio, 2),
                 .init("Y", .audio, 3)
             ]
-        case .videoCollection, .glowFaces, .graphInkFlow, .graphParticles, .graphPulse, .graphClouds,
+        case .triangulateFaces,.boxWaterfall,.sphereGimbal,.boxEdges,.videoCollection, .glowFaces, .graphInkFlow, .graphParticles, .graphPulse, .graphClouds,
              .graphCloudParticles, .flashFaces, .surfaceGate:
             return [.init("Collection", .collection, 0)]
         case .apc40:
@@ -258,7 +261,7 @@ extension NodeKind {
                 .init("Activator 7", .control, 32),
                 .init("Activator 8", .control, 33)
             ]
-        case .lightningPulses:
+        case .traceSnake,.tracePulse,.traceRainbow,.traceSolid,.lightningPulses:
             return [.init("Trace", .trace, 0)]
         case .palette, .videoPalette, .paletteAdjust:
             return [.init("Palette", .palette, 0)]

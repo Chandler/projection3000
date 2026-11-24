@@ -247,6 +247,10 @@ func write(_ changes: [Change], backups base: URL?) throws {
 }
 
 do {
+    if CommandLine.arguments.dropFirst().first == "compose" {
+        try convertComposeState(Array(CommandLine.arguments.dropFirst(2)))
+        exit(0)
+    }
     let options = try Options(Array(CommandLine.arguments.dropFirst()))
     var converter = Converter(), changes = [Change](), failures = 0, files = 0
     let candidates = try inputs(options.roots)

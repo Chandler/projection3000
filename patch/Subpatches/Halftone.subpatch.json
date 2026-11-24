@@ -1,0 +1,84 @@
+{
+  "version": 2,
+  "component": {
+    "id": "6912FB7A-4E52-5B8D-B58C-2A849C9B4CEA",
+    "name": "Halftone",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "8E4F3252-1586-5FDB-88B3-486E87949CA2"
+    ],
+    "interface": {
+      "processingInput": "C233BDCB-4621-523D-978D-1B800106FEBB",
+      "preview": "8E4F3252-1586-5FDB-88B3-486E87949CA2",
+      "ports": [
+        {
+          "id": "C233BDCB-4621-523D-978D-1B800106FEBB",
+          "node": "8E4F3252-1586-5FDB-88B3-486E87949CA2",
+          "name": "Video",
+          "key": "Video",
+          "type": "video",
+          "output": false
+        },
+        {
+          "id": "8B011F1C-98CC-5329-A023-F55C609F2E21",
+          "node": "8E4F3252-1586-5FDB-88B3-486E87949CA2",
+          "name": "Video",
+          "key": "Video",
+          "type": "video",
+          "output": true
+        }
+      ],
+      "parameters": [
+        {
+          "id": "7D435EC8-E237-5EDA-9182-2A33B8913B36",
+          "name": "Cell Size",
+          "node": "8E4F3252-1586-5FDB-88B3-486E87949CA2",
+          "key": "cell"
+        },
+        {
+          "id": "93832B67-9A92-5098-A7C8-FB467EA62335",
+          "name": "Screen",
+          "node": "8E4F3252-1586-5FDB-88B3-486E87949CA2",
+          "key": "shape"
+        },
+        {
+          "id": "E472ED55-FA30-51E4-852D-C3CC1A2C6E2A",
+          "name": "Angle",
+          "node": "8E4F3252-1586-5FDB-88B3-486E87949CA2",
+          "key": "angle"
+        },
+        {
+          "id": "2D5BE522-065F-5541-8C3E-BB2C2149FEE8",
+          "name": "Contrast",
+          "node": "8E4F3252-1586-5FDB-88B3-486E87949CA2",
+          "key": "contrast"
+        },
+        {
+          "id": "5C5C22C3-E80D-50B2-80EC-AD6FBEC0919F",
+          "name": "Mix",
+          "node": "8E4F3252-1586-5FDB-88B3-486E87949CA2",
+          "key": "mix"
+        }
+      ]
+    },
+    "collapsed": true
+  },
+  "nodes": [
+    {
+      "id": "8E4F3252-1586-5FDB-88B3-486E87949CA2",
+      "kind": "halftone",
+      "name": "Halftone",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {},
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

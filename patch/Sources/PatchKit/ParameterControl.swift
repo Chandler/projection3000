@@ -97,7 +97,7 @@ struct ParameterControl: View {
                     .textFieldStyle(.squareBorder).frame(width:80).frame(maxWidth:.infinity,alignment:.trailing)
             }
             if let spec, spec.key.lowercased().contains("temperature") {
-                HStack { Text("Cool"); Spacer(); Text("Unchanged"); Spacer(); Text("Warm") }.font(.caption2).foregroundStyle(.secondary)
+                HStack { Text("Cool"); Spacer(); Text("Unchanged"); Spacer(); Text("Warm") }.font(.editorCaption).foregroundStyle(.secondary)
             }
         }
     }
@@ -120,7 +120,7 @@ private struct BalanceSlider: View {
 
     var body: some View {
         HStack(spacing:8) {
-            Text("L").font(.caption.monospaced()).foregroundStyle(.secondary)
+            Text("L").font(.editorValue).foregroundStyle(.secondary)
             GeometryReader { geometry in
                 let width = max(1,geometry.size.width - 16)
                 let center = geometry.size.width / 2
@@ -145,7 +145,7 @@ private struct BalanceSlider: View {
                     value = abs(x-width/2) <= 3 ? 0 : Double(x/width)*2-1
                 }.onEnded { _ in dragging = false; onEditingChanged(false) })
             }.frame(height:24)
-            Text("R").font(.caption.monospaced()).foregroundStyle(.secondary)
+            Text("R").font(.editorValue).foregroundStyle(.secondary)
         }
         .focusable().focused($focused)
         .onMoveCommand { direction in

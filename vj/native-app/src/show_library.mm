@@ -75,13 +75,14 @@ static NSString* nameOf(const fs::path& root){return @(root.filename().c_str());
         self.lastItem.representedObject=@(show.c_str());self.lastItem.enabled=!busy;if(current)[self selectItem:self.lastItem];
     }
     [self.menu addItem:NSMenuItem.separatorItem];
-    for(NSArray* spec in @[@[@"New Show…",@"new"],@[@"Duplicate Show…",@"duplicate"],@[@"Show in Finder",@"finder"]]){[self addItemWithTitle:spec[0]];self.lastItem.representedObject=spec[1];}
+    for(NSArray* spec in @[@[@"New Show…",@"new"],@[@"Duplicate Show…",@"duplicate"],@[@"Export Patch Show…",@"convert"],@[@"Show in Finder",@"finder"]]){[self addItemWithTitle:spec[0]];self.lastItem.representedObject=spec[1];}
     [self invalidateIntrinsicContentSize];
 }
 - (void)mouseDown:(NSEvent*)event {[self reload];[super mouseDown:event];}
 - (void)performClick:(id)sender {[self reload];[super performClick:sender];}
 - (void)choose:(id)sender {
     (void)sender;NSString* choice=self.selectedItem.representedObject;[self reload];
+    if([choice isEqualToString:@"convert"]){[self exportPatchShow];return;}
     if([choice isEqualToString:@"finder"]){[NSWorkspace.sharedWorkspace activateFileViewerSelectingURLs:@[[NSURL fileURLWithPath:@(_root.c_str())]]];return;}
     if([choice isEqualToString:@"new"]||[choice isEqualToString:@"duplicate"]){[self create:[choice isEqualToString:@"duplicate"]];return;}
     if(!choice||fs::path(choice.fileSystemRepresentation)==_root)return;
@@ -89,6 +90,35 @@ static NSString* nameOf(const fs::path& root){return @(root.filename().c_str());
     alert.informativeText=[NSString stringWithFormat:@"VJ saves “%@” and reopens on “%@”. Outputs go dark for a few seconds.",nameOf(_root),nameOf(choice.fileSystemRepresentation)];
     [alert addButtonWithTitle:@"Open"];[alert addButtonWithTitle:@"Cancel"];
     if([alert runModal]==NSAlertFirstButtonReturn)[self reopen:choice copyFrom:nil];
+}
+- (void)exportPatchShow {
+    auto panel=[NSSavePanel savePanel];
+    panel.title=@"Export Patch Show";
+    panel.nameFieldStringValue=[nameOf(_root) stringByAppendingString:@" Patch"];
+    panel.directoryURL=[NSURL fileURLWithPath:@(vj::shows::library().c_str())];
+    if([panel runModal]!=NSModalResponseOK)return;
+    auto task=[NSTask new];
+    task.executableURL=[NSBundle.mainBundle.bundleURL URLByAppendingPathComponent:@"Contents/Helpers/patch-migrate"];
+    task.arguments=@[@"compose",@((_root/"native-state.json").c_str()),@((_root/"Patch/session.json").c_str()),
+                     [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"Subpatches"],panel.URL.path];
+    auto errors=[NSPipe pipe];
+    task.standardError=errors;
+    NSURL* destination=panel.URL;
+    task.terminationHandler=^(NSTask* finished){
+        NSData* message=[errors.fileHandleForReading readDataToEndOfFile];
+        dispatch_async(dispatch_get_main_queue(),^{
+            if(finished.terminationStatus==0){
+                [self reload];
+                [NSWorkspace.sharedWorkspace activateFileViewerSelectingURLs:@[destination]];
+            }else{
+                auto alert=[NSAlert new];alert.messageText=@"Show export failed";
+                alert.informativeText=[[NSString alloc]initWithData:message encoding:NSUTF8StringEncoding]?:@"";
+                [alert beginSheetModalForWindow:self.window completionHandler:nil];
+            }
+        });
+    };
+    NSError* error=nil;
+    if(![task launchAndReturnError:&error])[[NSAlert alertWithError:error] beginSheetModalForWindow:self.window completionHandler:nil];
 }
 - (void)create:(BOOL)duplicate {
     auto alert=[[NSAlert alloc]init];alert.messageText=duplicate?@"Duplicate show":@"New show";

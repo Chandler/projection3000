@@ -47,6 +47,11 @@ static NSTextField* label(NSString* value){return vj::style::label(value);}
     NSStackView* _sections;
     NSLayoutConstraint* _documentWidth;
     NSScrollView* _scroll;
+    NSStackView* _lightsHeader;
+    NSSegmentedControl* _lightSections;
+    NSTextField* _lightingStatus;
+    VJControlButton* _ledMute;
+    VJControlButton* _dmxBlackout;
     NSStackView* _content;
     NSTextField* _status;
     NSInteger _page;
@@ -66,8 +71,27 @@ static NSTextField* label(NSString* value){return vj::style::label(value);}
         _model=model;_wledTasks=dispatch_group_create();_strips=[NSMutableDictionary dictionary];_revision=UINT64_MAX;_renderedPage=-1;_apcView=[NSUserDefaults.standardUserDefaults boolForKey:@"VJDMXAPCView"];
         _scroll=[[NSScrollView alloc]init];_scroll.hasVerticalScroller=YES;_scroll.drawsBackground=NO;_scroll.translatesAutoresizingMaskIntoConstraints=NO;
         _status=label(@"");_status.translatesAutoresizingMaskIntoConstraints=NO;_status.textColor=vj::style::secondary();
-        [self addSubview:_scroll];[self addSubview:_status];
-        [NSLayoutConstraint activateConstraints:@[[_scroll.topAnchor constraintEqualToAnchor:self.topAnchor],[_scroll.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],[_scroll.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],[_scroll.bottomAnchor constraintEqualToAnchor:_status.topAnchor constant:-4],[_status.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],[_status.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-4]]];
+        _lightsHeader=stack(NSUserInterfaceLayoutOrientationHorizontal);
+        _lightsHeader.edgeInsets=NSEdgeInsetsMake(8,12,8,12);
+        _lightsHeader.spacing=12;
+        _lightSections=[NSSegmentedControl segmentedControlWithLabels:@[@"LED strips",@"DMX fixture"] trackingMode:NSSegmentSwitchTrackingSelectOne target:self action:@selector(lightSectionChanged:)];
+        _lightSections.accessibilityLabel=@"Lighting controls";
+        [_lightsHeader addArrangedSubview:_lightSections];
+        _lightingStatus=label(@"");
+        _lightingStatus.textColor=vj::style::secondary();
+        [_lightsHeader addArrangedSubview:_lightingStatus];
+        _ledMute=[self actionButton:@"Mute LEDs" path:"/api/v1/mix" command:Json::object()];
+        _ledMute->key="led_mute";_ledMute.buttonType=NSButtonTypePushOnPushOff;_ledMute.action=@selector(toggleChanged:);
+        [_lightsHeader addArrangedSubview:_ledMute];
+        _dmxBlackout=[self actionButton:@"DMX blackout" path:"/api/v1/dmx" command:Json{{"controls",Json::object()}}];
+        _dmxBlackout->key="blackout";_dmxBlackout.buttonType=NSButtonTypePushOnPushOff;_dmxBlackout.action=@selector(toggleChanged:);
+        [_lightsHeader addArrangedSubview:_dmxBlackout];
+        _lightsHeader.hidden=YES;
+        auto body=stack(NSUserInterfaceLayoutOrientationVertical);
+        body.spacing=0;body.translatesAutoresizingMaskIntoConstraints=NO;
+        [body addArrangedSubview:_lightsHeader];[body addArrangedSubview:_scroll];
+        [self addSubview:body];[self addSubview:_status];
+        [NSLayoutConstraint activateConstraints:@[[body.topAnchor constraintEqualToAnchor:self.topAnchor],[body.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],[body.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],[body.bottomAnchor constraintEqualToAnchor:_status.topAnchor constant:-4],[_scroll.widthAnchor constraintEqualToAnchor:body.widthAnchor],[_status.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],[_status.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-4]]];
         [self refresh];
     }return self;
 }
@@ -81,6 +105,13 @@ static NSTextField* label(NSString* value){return vj::style::label(value);}
 - (void)setHidden:(BOOL)hidden {if(hidden)[_rgb deactivate];[super setHidden:hidden];if(_model)[self controllerLease];}
 - (void)viewDidMoveToWindow {[super viewDidMoveToWindow];if(_model)[self controllerLease];}
 - (void)dmxViewChanged:(NSButton*)sender {_apcView=sender.tag==1;[NSUserDefaults.standardUserDefaults setBool:_apcView forKey:@"VJDMXAPCView"];_revision=UINT64_MAX;[self refresh];}
+- (void)showLights {
+    BOOL dmx=[NSUserDefaults.standardUserDefaults boolForKey:@"VJLightsShowsDMX"];
+    [self selectPage:dmx?2:3];
+}
+- (void)lightSectionChanged:(NSSegmentedControl*)sender {
+    [self selectPage:sender.selectedSegment==1?2:3];
+}
 - (void)selectPage:(NSInteger)page {
     if(page==4)page=1;
     if(_page!=page)[_rgb deactivate];
@@ -88,6 +119,11 @@ static NSTextField* label(NSString* value){return vj::style::label(value);}
     // Otherwise AppKit can keep its field editor focused after a button click.
     [self.window makeFirstResponder:nil];
     BOOL changed=_page!=page;_page=page;
+    _lightsHeader.hidden=page!=2&&page!=3;
+    if(!_lightsHeader.hidden){
+        _lightSections.selectedSegment=page==2?1:0;
+        [NSUserDefaults.standardUserDefaults setBool:page==2 forKey:@"VJLightsShowsDMX"];
+    }
     if(changed){[_scroll.contentView scrollToPoint:NSZeroPoint];_revision=UINT64_MAX;}
     [self refresh];
 }
@@ -127,6 +163,12 @@ static NSTextField* label(NSString* value){return vj::style::label(value);}
         if([editorOwner isKindOfClass:NSView.class]&&[(NSView*)editorOwner isDescendantOf:self])return;
     }
     _runtimeShape=runtimeShape;_revision=revision;_runtimeRevision=runtimeRevision;auto state=snap["state"];if(!state.contains("mix")){_status.stringValue=@"Controls unavailable";return;}
+    if(_page==2||_page==3){
+        auto output=state.value("fixtureOutput",Json::object());
+        _lightingStatus.stringValue=text("WLED · "+output.value("status",std::string("off"))+"     DMX · "+d.value("status",std::string("disconnected")));
+        _ledMute.state=state["mix"].value("led_mute",false)?NSControlStateValueOn:NSControlStateValueOff;
+        _dmxBlackout.state=d["controls"].value("blackout",false)?NSControlStateValueOn:NSControlStateValueOff;
+    }
     _renderedPage=_page;
     _xy=nil;_channels=nil;_motionTarget=nil;_rgb=nil;_linkedStrip=nil;_linkedFixtureIds=nil;[_strips removeAllObjects];_monitor.hidden=YES;auto scrollOrigin=_scroll.contentView.bounds.origin;auto document=[[VJControlsStack alloc]init];document.orientation=NSUserInterfaceLayoutOrientationVertical;document.alignment=NSLayoutAttributeLeading;document.spacing=0;document.translatesAutoresizingMaskIntoConstraints=NO;_sections=document;_scroll.documentView=_sections;_documentWidth=[_sections.widthAnchor constraintEqualToConstant:MIN(860,MAX(560,_scroll.contentView.bounds.size.width))];_documentWidth.active=YES;
     if(_page==0){
@@ -148,11 +190,9 @@ static NSTextField* label(NSString* value){return vj::style::label(value);}
         [self choices:@"APC lights" key:"mode" value:state["grid"].value("controller_lights",std::string("full")) options:{"full","dim","off"} path:"/api/v1/grid" command:Json{{"action","set_controller_lights"}}];
     }else if(_page==2){
         auto d=state["dmx"],controls=d["controls"];std::string path="/api/v1/dmx";
-        [self heading:@"DMX"];auto toolbar=stack(NSUserInterfaceLayoutOrientationHorizontal);[_content addArrangedSubview:toolbar];
+        [self heading:@"Fixture controls"];auto toolbar=stack(NSUserInterfaceLayoutOrientationHorizontal);[_content addArrangedSubview:toolbar];
         const bool connected=d.value("connected",false),busy=connected||d.value("status",std::string{})=="connecting"||d.value("status",std::string{})=="disconnecting";
         for(auto action:{"identify","flash"}){auto b=[self actionButton:std::string(action)=="identify"?@"Identify · 3s":@"Flash · 250ms" path:path command:Json{{"action",action}}];b.enabled=connected;[toolbar addArrangedSubview:b];}
-        auto blackout=[self actionButton:@"Blackout" path:path command:Json{{"controls",Json::object()}}];blackout->key="blackout";blackout.buttonType=NSButtonTypePushOnPushOff;blackout.state=controls.value("blackout",false)?NSControlStateValueOn:NSControlStateValueOff;blackout.action=@selector(toggleChanged:);[toolbar addArrangedSubview:blackout];
-        [_content addArrangedSubview:label(text(d.value("status",std::string("disconnected"))))];
         if(!d.value("error",std::string{}).empty())[_content addArrangedSubview:label(text(d["error"]))];
         auto tabs=stack(NSUserInterfaceLayoutOrientationHorizontal);[_content addArrangedSubview:tabs];for(NSInteger i=0;i<2;++i){auto b=[NSButton buttonWithTitle:i?@"APC40":@"Controls" target:self action:@selector(dmxViewChanged:)];b.tag=i;b.identifier=i?@"tab-dmx-apc":@"tab-dmx-full";b.state=(_apcView==(i==1))?NSControlStateValueOn:NSControlStateValueOff;[b.widthAnchor constraintEqualToConstant:100].active=YES;[b.heightAnchor constraintEqualToConstant:vj::style::controlHeight].active=YES;[tabs addArrangedSubview:b];}
         [self heading:@"Motion"];[self choices:@"Pattern" key:"motion" value:controls["motion"] options:{"off","circle","pan","tilt","figure_eight"} path:path command:Json{{"controls",Json::object()}}];
@@ -164,7 +204,6 @@ static NSTextField* label(NSString* value){return vj::style::label(value);}
             [_content addArrangedSubview:makeDial("brightness",@"Brightness",@"TEMPO")];std::array<std::string,6> keys={"pan","tilt","speed","beam","strobe","color"};NSArray* titles=@[@"Pan",@"Tilt",@"Speed",@"Beam width",@"Strobe speed",@"Color"];
             for(int r=0;r<2;++r){auto row=stack(NSUserInterfaceLayoutOrientationHorizontal);row.distribution=NSStackViewDistributionFillEqually;[row.widthAnchor constraintEqualToConstant:480].active=YES;[_content addArrangedSubview:row];for(int c=0;c<4;++c){int i=r*4+c;if(i<6)[row addArrangedSubview:makeDial(keys[i],titles[i],text(std::to_string(i+1)))];else{auto empty=stack(NSUserInterfaceLayoutOrientationVertical);[empty addArrangedSubview:label(text(std::to_string(i+1)))];[empty addArrangedSubview:label(@"Unassigned")];[row addArrangedSubview:empty];}}}
             [self swatches:YES];
-            [self toggle:@"Blackout" key:"blackout" value:controls.value("blackout",false) path:path command:Json{{"controls",Json::object()}}];
         }else{
         [self heading:@"Connection"];std::vector<Json> serials={""};for(const auto& device:d.value("devices",Json::array()))serials.push_back(device.value("serial",std::string{}));
         if(std::find(serials.begin(),serials.end(),d.value("serial",std::string{}))==serials.end())serials.push_back(d.value("serial",std::string{}));
@@ -185,7 +224,7 @@ static NSTextField* label(NSString* value){return vj::style::label(value);}
         auto motors=stack(NSUserInterfaceLayoutOrientationHorizontal);for(auto motor:{"all","pan_tilt","zoom"}){auto b=[self actionButton:std::string(motor)=="all"?@"Reset all motors":std::string(motor)=="pan_tilt"?@"Reset pan / tilt":@"Reset zoom" path:path command:Json{{"action","reset"},{"motor",motor}}];b.enabled=connected&&controls.value("blackout",false);[motors addArrangedSubview:b];}[_content addArrangedSubview:motors];
         }
     }else if(_page==3){
-        [self heading:@"LED destinations"];auto output=state.value("fixtureOutput",Json::object());[_content addArrangedSubview:label(text("WLED UDP · "+output.value("status",std::string("off"))))];
+        [self heading:@"WLED output"];auto output=state.value("fixtureOutput",Json::object());
         auto scanRow=[self row:@"Discovery"];auto scan=[NSButton buttonWithTitle:_wledScanning?@"Scanning…":@"Scan for WLED" target:self action:@selector(scanWled:)];scan.identifier=@"wled-scan";scan.enabled=!_wledScanning;[scan.widthAnchor constraintEqualToConstant:150].active=YES;[scan.heightAnchor constraintEqualToConstant:vj::style::controlHeight].active=YES;[scanRow addArrangedSubview:scan];
         if(_wledDiscovery.is_object()){
             auto devices=_wledDiscovery.value("devices",Json::array());
@@ -203,7 +242,7 @@ static NSTextField* label(NSString* value){return vj::style::label(value);}
         auto destination=[self row:@"WLED host"];auto host=[[VJControlField alloc]init];host->key="host";host->path="/api/v1/fixture-output";host->command=Json::object();host.stringValue=text(output.value("host",std::string("")));host.target=self;host.action=@selector(fieldChanged:);[host.widthAnchor constraintEqualToConstant:260].active=YES;[host.heightAnchor constraintEqualToConstant:vj::style::controlHeight].active=YES;[destination addArrangedSubview:host];
         auto portRow=[self row:@"UDP port"];auto port=[[VJControlField alloc]init];port->key="port";port->path="/api/v1/fixture-output";port->command=Json::object();port.stringValue=text(std::to_string(output.value("port",21324)));port.target=self;port.action=@selector(fieldChanged:);[port.widthAnchor constraintEqualToConstant:90].active=YES;[port.heightAnchor constraintEqualToConstant:vj::style::controlHeight].active=YES;[portRow addArrangedSubview:port];
         [self button:output.value("active",false)?@"Stop WLED":@"Start WLED" path:"/api/v1/fixture-output" command:Json{{"action",output.value("active",false)?"stop":"start"}}];
-        if(!output.value("error",std::string{}).empty())[_content addArrangedSubview:label(text(output["error"]))];[self toggle:@"Link strips" key:"linked" value:state.value("linked",true) path:"/api/v1/leds" command:_selectedFixture.empty()?Json::object():Json{{"source",_selectedFixture}}];auto fixtures=state.value("fixtures",Json::array());const bool linked=state.value("linked",true);Json displayed=Json::array();NSMutableArray* linkedIds=[NSMutableArray array];int linkedCount=0;Json primary;
+        if(!output.value("error",std::string{}).empty())[_content addArrangedSubview:label(text(output["error"]))];[self heading:@"Strip routing"];[self toggle:@"Link strips" key:"linked" value:state.value("linked",true) path:"/api/v1/leds" command:_selectedFixture.empty()?Json::object():Json{{"source",_selectedFixture}}];auto fixtures=state.value("fixtures",Json::array());const bool linked=state.value("linked",true);Json displayed=Json::array();NSMutableArray* linkedIds=[NSMutableArray array];int linkedCount=0;Json primary;
         for(const auto& f:fixtures)if(f.value("kind",std::string{})!="virtual"){if(primary.is_null()||(f.value("enabled",false)&&!primary.value("enabled",false)))primary=f;if(f.value("enabled",false)){[linkedIds addObject:text(f["id"])];linkedCount+=f.value("count",0);}}else displayed.push_back(f);
         if(linked&&!primary.is_null()){auto representative=primary;representative["label"]="Linked strips";representative["count"]=linkedCount;representative["enabled"]=!linkedIds.count?false:true;displayed.insert(displayed.begin(),representative);}else displayed=fixtures;
         if(displayed.empty())[_content addArrangedSubview:label(@"No fixtures")];for(auto& f:displayed){std::string fid=f.value("id",std::string{}),path="/api/v1/leds/"+fid;[self heading:text(f.value("label",fid)+" · "+std::to_string(f.value("count",0)))];[self toggle:@"Enabled" key:"enabled" value:f.value("enabled",false) path:path command:Json::object()];std::vector<Json> outs={"none"};int count=state["grid"]["running"].size();for(int i=1;i<=count;i++)outs.push_back("out"+std::to_string(i));auto route=f["route"];if(std::find(outs.begin(),outs.end(),route["out"])==outs.end())outs.push_back(route["out"]);[self choices:@"Out" key:"out" value:route["out"] options:outs path:path command:Json{{"route",Json::object()}}];auto popup=(VJControlPopup*)((NSStackView*)_content.arrangedSubviews.lastObject).arrangedSubviews.lastObject;for(NSUInteger i=0;i<popup.itemArray.count;++i)popup.itemArray[i].title=i==0?@"None":i<=NSUInteger(count)?[NSString stringWithFormat:@"Out %lu",(unsigned long)i]:[text(route["out"]) stringByAppendingString:@" · Inactive"];for(auto key:{"start","end","offset"})[self slider:[text(key) capitalizedString] key:key value:route.value(key,0.) min:0 max:1 path:path command:Json{{"route",Json::object()}}];[self toggle:@"Reverse" key:"reverse" value:route.value("reverse",false) path:path command:Json{{"route",Json::object()}}];for(auto key:{"brightness","power_limit"}){if(std::string(key)=="power_limit"&&f.value("kind",std::string{})=="virtual")continue;[self slider:std::string(key)=="brightness"?@"Brightness":@"Power limit" key:key value:f.value(key,1.) min:0 max:1 path:path command:Json::object()];}[self strips:Json{{"fixtures",Json::array({f})}}];if(linked&&f.value("kind",std::string{})!="virtual"){_linkedStrip=_strips[text(fid)];_linkedFixtureIds=linkedIds;}}

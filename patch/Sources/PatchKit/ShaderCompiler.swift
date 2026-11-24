@@ -9,6 +9,12 @@ enum ShaderCompiler {
         if node.kind == .flashCells { return FlashCellsField.path }
         if node.kind == .streakGlow { return GlowField.path }
         if let file = node.file {
+            let prefix = "bundle:User Nodes/"
+            if file.hasPrefix(prefix) {
+                let relative = String(file.dropFirst(prefix.count))
+                guard !relative.isEmpty, !relative.hasPrefix("/"), !relative.split(separator:"/").contains("..") else { return nil }
+                return UserNodeLibrary.bundledDirectory?.appendingPathComponent(relative).path
+            }
             if FileManager.default.fileExists(atPath:file) { return file }
             // Saved projects can reference the other application's built-in library.
             // Rebase only that explicit bundle-relative namespace, never external

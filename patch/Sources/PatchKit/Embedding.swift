@@ -1,4 +1,6 @@
 import AppKit
+import Metal
+import SwiftUI
 import PatchCore
 
 /// One independent editor/runtime per host. Video leaves through the graph's
@@ -79,6 +81,69 @@ public final class PatchEditorController: NSViewController {
         guard !stopped else { return }
         editor.midi.receiveHostChannelFaders(values.map(\.doubleValue))
     }
+    @objc(instantiateLibrarySubpatch:outputID:error:)
+    public func instantiateLibrarySubpatch(_ id: String, outputID: String) throws -> NSDictionary {
+        guard !stopped,let output = UUID(uuidString:outputID) else { throw GraphError("Invalid subpatch output or inactive editor") }
+        return try stageOutput(PatchLibrary.template(id),output:output)
+    }
+
+    @objc(instantiateLibrarySubpatch:outputID:inputSource:error:)
+    public func instantiateLibrarySubpatch(_ id: String, outputID: String, inputSource: String) throws -> NSDictionary {
+        guard !stopped,let output = UUID(uuidString:outputID) else { throw GraphError("Invalid subpatch output or inactive editor") }
+        return try stageOutput(PatchLibrary.template(id),output:output,inputSource:inputSource)
+    }
+
+    @objc(encodeProcessor:input:output:commandBuffer:time:context:error:)
+    public func encodeProcessor(_ source: String, input: MTLTexture, output: MTLTexture,
+                                commandBuffer: MTLCommandBuffer, time: Double, context: String) throws {
+        try editor.renderer.encodeAdjustment(source, input: input, output: output, command: commandBuffer, time: time)
+    }
+
+    @objc(duplicatePublishedOutput:error:)
+    public func duplicatePublishedOutput(_ source: String) throws -> NSDictionary {
+        guard !stopped else { throw GraphError("Inactive editor") }
+        let origin = try editor.workspace.graph.templateForPublishedOutput(source)
+        return try stageOutput(origin.template,output:origin.outputID,inputSource:origin.inputSource,copyInputs:true)
+    }
+
+    private func stageOutput(_ template: SubpatchTemplate, output: UUID, inputSource: String? = nil, copyInputs: Bool = false) throws -> NSDictionary {
+        let placed = try editor.workspace.stageLibraryOutput(template,outputID:output,inputSource:inputSource,copyInputs:copyInputs)
+        do { try editor.writeSession() }
+        catch {
+            if let raw = placed["id"] as? String,let instance = UUID(uuidString:raw) { try editor.workspace.discardLibraryInsertion(instance) }
+            throw error
+        }
+        return placed as NSDictionary
+    }
+    @objc(commitLibrarySubpatch:)
+    public func commitLibrarySubpatch(_ id: String) {
+        if let instance = UUID(uuidString:id) { editor.workspace.commitLibraryInsertion(instance) }
+    }
+    @objc(discardLibrarySubpatch:error:)
+    public func discardLibrarySubpatch(_ id: String) throws {
+        guard let instance = UUID(uuidString:id) else { throw GraphError("Invalid subpatch instance") }
+        try editor.workspace.discardLibraryInsertion(instance)
+        try editor.writeSession()
+    }
+    private func outputOwner(_ source: String) -> (node: UUID, component: Component?)? {
+        let graph = editor.workspace.graph
+        guard let port = graph.publishablePorts.first(where:{ $0.id == source }) else { return nil }
+        let group = graph.groups.first { $0.interface?.ports.contains { $0.output && $0.node == port.nodeID && $0.key == port.portID } == true }
+        return (port.nodeID,group)
+    }
+
+    @objc(controlsForPublishedOutput:)
+    public func controlsForPublishedOutput(_ source: String) -> NSView? {
+        guard !stopped, let group = outputOwner(source)?.component,
+              group.interface?.parameters.isEmpty == false else { return nil }
+        return NSHostingView(rootView:PublishedControls(workspace:editor.workspace,groupID:group.id))
+    }
+    @objc(focusPublishedOutput:)
+    public func focusPublishedOutput(_ source: String) {
+        guard let owner = outputOwner(source) else { return }
+        editor.workspace.focusSelection(owner.component?.id ?? owner.node)
+        editor.canvas.frameSelection()
+    }
     @objc public func frameGraph() { view.layoutSubtreeIfNeeded(); editor.canvas.fit() }
     @objc public func saveSession() { editor.persistSession() }
     @objc public var publishedOutputs: NSArray { editor.renderer.publishedOutputs as NSArray }
@@ -102,5 +167,17 @@ enum PatchResources {
         if let url = Bundle.main.url(forResource:"Shaders",withExtension:"metal") { return url }
         if let url = Bundle.module.url(forResource:"Shaders",withExtension:"metal") { return url }
         throw GraphError("Missing Patch shaders")
+    }
+}
+
+private struct PublishedControls: View {
+    @ObservedObject var workspace: Workspace
+    let groupID: UUID
+    var body: some View {
+        VStack(alignment:.leading,spacing:8) {
+            ForEach(workspace.graph.component(groupID)?.interface?.parameters ?? []) { control in
+                NodeAppParameter(workspace:workspace,id:control.node,key:control.key,title:control.name)
+            }
+        }.padding(6)
     }
 }

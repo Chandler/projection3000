@@ -29,7 +29,7 @@ struct LEDMatrixInspector: View {
                                     VStack(spacing:2) {
                                         Rectangle().fill(.secondary).frame(width:1,height:4)
                                         Text(Int(spec.min+(spec.max-spec.min)*Double(index)/4).description)
-                                            .font(.system(size:8,design:.monospaced)).foregroundStyle(.secondary)
+                                            .font(.editorCaption.monospacedDigit()).foregroundStyle(.secondary)
                                     }.position(x:8+max(0,geometry.size.width-16)*Double(index)/4,y:8)
                                 }
                             }
@@ -43,7 +43,7 @@ struct LEDMatrixInspector: View {
     }
     var body: some View {
         VStack(alignment:.leading,spacing:14) {
-            Text("LED MATRIX").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+            Text("LED MATRIX").font(.editorHeading).foregroundStyle(.secondary)
             control("columns"); control("grid")
             if node?.value("grid")==1 { control("rows") }
             control("shape"); control("size")

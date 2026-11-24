@@ -1088,21 +1088,20 @@ void set_vector_blend(const std::string &blend, bool glow_pass) {
 
 }
 struct VectorHost::Impl {
-    std::filesystem::path bundled,uploaded;
+    std::filesystem::path uploaded;
     GLuint program=0,vao=0,vbo=0,ebo=0;GLint pass=-1;
     struct Cache {std::unique_ptr<VectorWasmEffect> effect;std::string signature,error;uint64_t errorRevision=0;size_t segments=0,splats=0;};
     std::map<std::string,Cache> layers;std::set<std::string> used;uint64_t revision=0;
-    Impl(std::filesystem::path modules,std::filesystem::path external):bundled(std::move(modules)),uploaded(std::move(external)){
+    Impl(std::filesystem::path external):uploaded(std::move(external)){
         program=make_vector_program();pass=glGetUniformLocation(program,"vector_pass");glGenVertexArrays(1,&vao);glGenBuffers(1,&vbo);glGenBuffers(1,&ebo);glBindVertexArray(vao);glBindBuffer(GL_ARRAY_BUFFER,vbo);
         const size_t offsets[]={offsetof(VectorGpuVertex,position),offsetof(VectorGpuVertex,line_local),offsetof(VectorGpuVertex,core),offsetof(VectorGpuVertex,glow),offsetof(VectorGpuVertex,widths)};const GLint sizes[]={2,3,4,4,4};
         for(GLuint i=0;i<5;++i){glVertexAttribPointer(i,sizes[i],GL_FLOAT,GL_FALSE,sizeof(VectorGpuVertex),reinterpret_cast<void*>(offsets[i]));glEnableVertexAttribArray(i);}glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo);
     }
     ~Impl(){layers.clear();if(ebo)glDeleteBuffers(1,&ebo);if(vbo)glDeleteBuffers(1,&vbo);if(vao)glDeleteVertexArrays(1,&vao);if(program)glDeleteProgram(program);}
     std::filesystem::path modulePath(const std::string& module)const{
-        namespace fs=std::filesystem;constexpr std::string_view prefix="/vector/modules/";
+        namespace fs=std::filesystem;constexpr std::string_view prefix="/vector/modules/external/";
         if(!module.starts_with(prefix))throw std::runtime_error("Invalid vector module path");
-        auto relative=module.substr(prefix.size());auto root=bundled;
-        if(relative.starts_with("external/")){root=uploaded;relative=relative.substr(9);}
+        auto relative=module.substr(prefix.size());auto root=uploaded;
         if(root.empty()||relative.empty()||fs::path(relative).is_absolute()||fs::path(relative).extension()!=".wasm")throw std::runtime_error("Vector module root or path is unavailable");
         root=fs::weakly_canonical(root);auto path=fs::weakly_canonical(root/relative);auto a=root.begin(),b=path.begin();for(;a!=root.end();++a,++b)if(b==path.end()||*a!=*b)throw std::runtime_error("Vector module escapes module root");
         if(!fs::is_regular_file(path))throw std::runtime_error("Vector module is missing");const auto size=fs::file_size(path);if(size<8||size>2*1024*1024)throw std::runtime_error("Vector module size is invalid");return path;
@@ -1112,7 +1111,7 @@ struct VectorHost::Impl {
         try{
             auto recipe=parse_vector_recipe(layer.vector);if(!recipe)throw std::runtime_error("Invalid vector recipe");const auto path=modulePath(recipe->module);
             const auto signature=path.string()+":"+std::to_string(std::filesystem::file_size(path))+":"+std::to_string(static_cast<long long>(std::filesystem::last_write_time(path).time_since_epoch().count()))+":"+std::to_string(recipe->abi);
-            if(!cache.effect||cache.signature!=signature){std::ifstream input(path,std::ios::binary);std::vector<uint8_t> bytes(std::istreambuf_iterator<char>(input),{});cache.effect=std::make_unique<VectorWasmEffect>(bytes,recipe->module,recipe->abi,recipe->module=="/vector/modules/slime-mold.wasm"?80'000'000:5'000'000);cache.signature=signature;cache.segments=0;cache.splats=0;}
+            if(!cache.effect||cache.signature!=signature){std::ifstream input(path,std::ios::binary);std::vector<uint8_t> bytes(std::istreambuf_iterator<char>(input),{});cache.effect=std::make_unique<VectorWasmEffect>(bytes,recipe->module,recipe->abi,5'000'000);cache.signature=signature;cache.segments=0;cache.splats=0;}
             const auto picture=cache.effect->evaluate(recipe->params,seconds,beat);cache.segments=picture.segments.size();cache.splats=picture.splats.size();
             Rect rect;rect.corners={{{0,0}},{{1,0}},{{1,1}},{{0,1}}};rect.fit="stretch";
             // Compositor applies layer opacity/blend/master after this transparent source.
@@ -1135,7 +1134,7 @@ void installWasmtimeModuleValidator() {
         for(double seconds:{0.0,0.5,10.0}) effect.evaluate(defaults,seconds,seconds*2,true);
     });
 }
-VectorHost::VectorHost(std::filesystem::path bundled,std::filesystem::path uploaded):impl_(std::make_shared<Impl>(std::move(bundled),std::move(uploaded))){}
+VectorHost::VectorHost(std::filesystem::path uploaded):impl_(std::make_shared<Impl>(std::move(uploaded))){}
 VectorHost::~VectorHost()=default;
 void VectorHost::install(NativeRenderGraph& graph){std::weak_ptr<Impl> weak=impl_;graph.set_vector_layer_renderer([weak](const NativeLayer& layer,double seconds,double beat,int width,int height){if(auto owner=weak.lock())return owner->render(layer,seconds,beat,width,height);return false;});}
 void VectorHost::beginFrame(uint64_t revision){impl_->revision=revision;impl_->used.clear();}

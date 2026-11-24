@@ -11,6 +11,7 @@
 - (BOOL)checkPage:(NSInteger)page;
 - (BOOL)checkScrollToEnd; // Test-only: checks reset, leaves the current page at its bottom.
 - (void)selectPage:(NSInteger)page;
+- (void)showLights;
 @property(copy) void (^settingsAction)(NSString*);
 - (void)stop;
 @end

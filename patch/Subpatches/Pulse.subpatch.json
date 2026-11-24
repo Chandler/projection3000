@@ -1,0 +1,109 @@
+{
+  "version": 2,
+  "component": {
+    "id": "E763EBFC-BE0B-5524-BB29-2DC8059907B1",
+    "name": "Pulse",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "members": [
+      "BE2016F6-4DB2-56F8-AE77-AA358C93C043"
+    ],
+    "collapsed": true,
+    "interface": {
+      "ports": [
+        {
+          "id": "04F1159F-C207-51AB-A821-BBDD52EEA77B",
+          "node": "BE2016F6-4DB2-56F8-AE77-AA358C93C043",
+          "name": "Trace",
+          "key": "Trace",
+          "output": true,
+          "type": "trace"
+        }
+      ],
+      "parameters": [
+        {
+          "id": "260E9FA2-7FD0-573D-9EC8-F3443ACD7699",
+          "name": "Color",
+          "node": "BE2016F6-4DB2-56F8-AE77-AA358C93C043",
+          "key": "tint"
+        },
+        {
+          "id": "F4B58CDA-3F6F-518F-8651-4AFAC2F33302",
+          "name": "Beat sync",
+          "node": "BE2016F6-4DB2-56F8-AE77-AA358C93C043",
+          "key": "beat_sync"
+        },
+        {
+          "id": "45D12331-0F61-5683-B958-209B77F592B2",
+          "name": "Pulses / s",
+          "node": "BE2016F6-4DB2-56F8-AE77-AA358C93C043",
+          "key": "rate"
+        },
+        {
+          "id": "68835D61-54F0-517E-BDB3-E03C0DEB7C01",
+          "name": "Pulses/beat",
+          "node": "BE2016F6-4DB2-56F8-AE77-AA358C93C043",
+          "key": "per_beat"
+        },
+        {
+          "id": "957FD394-8F32-560B-8F44-0BB96EB42CDD",
+          "name": "On time",
+          "node": "BE2016F6-4DB2-56F8-AE77-AA358C93C043",
+          "key": "on_time"
+        },
+        {
+          "id": "1B183759-943E-5EBD-B9AB-B8700427F72B",
+          "name": "Attack",
+          "node": "BE2016F6-4DB2-56F8-AE77-AA358C93C043",
+          "key": "attack"
+        },
+        {
+          "id": "3A059711-674A-5123-A5DD-A96EC70792C3",
+          "name": "Release",
+          "node": "BE2016F6-4DB2-56F8-AE77-AA358C93C043",
+          "key": "release"
+        },
+        {
+          "id": "A98222D5-567A-518E-A909-4C17564286A2",
+          "name": "Floor glow",
+          "node": "BE2016F6-4DB2-56F8-AE77-AA358C93C043",
+          "key": "floor"
+        },
+        {
+          "id": "6A501EC5-743E-5E89-B57C-56F99C7DD235",
+          "name": "Softness",
+          "node": "BE2016F6-4DB2-56F8-AE77-AA358C93C043",
+          "key": "curve"
+        }
+      ],
+      "preview": "BE2016F6-4DB2-56F8-AE77-AA358C93C043"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BE2016F6-4DB2-56F8-AE77-AA358C93C043",
+      "kind": "tracePulse",
+      "name": "Pulse",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "tint": 16777215,
+        "beat_sync": 0,
+        "rate": 0.5,
+        "per_beat": 1.0,
+        "on_time": 0.5,
+        "attack": 0.05,
+        "release": 0.1,
+        "floor": 0.0,
+        "curve": 1.0
+      },
+      "enabled": true
+    }
+  ],
+  "edges": [],
+  "midiMappings": []
+}

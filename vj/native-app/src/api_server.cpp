@@ -35,7 +35,9 @@ Target parseTarget(std::string_view raw){
 bool external(const std::string& path){return path.starts_with("/api/v1/")||path.starts_with("/vector/")||path.starts_with("/mapping/js/")||path=="/mapping/graphics.js";}
 bool mediaUploadRoute(const std::string& path){return path=="/api/videos/upload"||path=="/api/files/upload";}
 bool mediaAssetRoute(const std::string& path){return path.starts_with("/videos/")||path.starts_with("/native-media/")||path.starts_with("/removable/")||path=="/api/videos/thumbnail"||path.starts_with("/api/clips/text-thumbnail/");}
-bool backgroundRequest(const std::string& method,const std::string& path){
+bool backgroundRequest(const std::string& method,const std::string& path,const Json& body){
+    if(path.starts_with("/api/v1/library/"))return true;
+    if(method=="POST"&&path=="/api/v1/grid"&&body.is_object()&&(body.contains("subpatchID")||body.value("action",Json())=="make_independent"))return true;
     if(path=="/api/v1/fixture-output/discover")return true;
     if(path=="/api/videos"||path=="/api/images"||path.starts_with("/api/removable")||path=="/api/v1/media/drives"||path=="/api/v1/effects"||path.starts_with("/api/v1/effects/"))return true;
     if(path.starts_with("/api/v1/ndi/clients")||path=="/api/v1/network"||path=="/api/v1/stats")return true;
@@ -83,6 +85,8 @@ std::string methods(const std::string& path){
     if(path=="/api/v1/display-assignments")return "GET, HEAD, PUT";
     if(path=="/api/v1/displays"||path=="/api/mapping/displays")return "GET, HEAD";
     if(path=="/health"||path=="/api/v1/state"||path=="/api/v1/effects"||path.starts_with("/api/v1/effects/")||path=="/api/v1/events"||path=="/ws/ui"||path=="/api/cameras"||path=="/api/media/catalog"||path=="/api/v1/media/catalog"||path.starts_with("/api/v1/sources/"))return "GET, HEAD";
+    if(path=="/api/v1/library/favorites")return "GET, HEAD, POST";
+    if(path=="/api/v1/library/subpatches")return "GET, HEAD";
     if(path=="/api/v1/grid")return "GET, HEAD, POST";
     if(path=="/api/v1/outputs")return "PUT";
     if(path.starts_with("/api/v1/outputs/"))return "POST";
@@ -303,7 +307,7 @@ public:
                 // JSON bodies do not override the URL's requested parameters.
                 body.update(target.query);
             }
-            if(backgroundRequest(method,target.path)){
+            if(backgroundRequest(method,target.path,body)){
                 if(workers_.pending->fetch_add(1)>=RequestWorkers::limit){workers_.pending->fetch_sub(1);send({503,{{"error","Background request queue is busy"}}});return;}
                 // No socket or HTTP response state is touched on a worker.
                 // Holding self keeps the connection/executor alive until its

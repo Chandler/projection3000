@@ -68,7 +68,7 @@ extension ControlAPI {
         }
         var fieldParameters: [ParameterSpec]?
         if let declaration = body["parameters"] {
-            guard kind == .fieldShader else { throw GraphError("Custom parameters require kind fieldShader") }
+            guard [.fieldShader,.shaderEffect].contains(kind),body["controlStyle"] == nil else { throw GraphError("Declare parameters for a Field Shader or a Shader Effect without a built-in control style") }
             fieldParameters = try JSONDecoder().decode([ParameterSpec].self,from:JSONSerialization.data(withJSONObject:declaration))
             try ParameterSpec.validateShaderParameters(fieldParameters ?? [])
         }

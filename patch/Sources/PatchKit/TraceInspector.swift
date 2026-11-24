@@ -28,7 +28,7 @@ struct TraceInspector: View {
                 }.midiParameter(workspace:workspace,id:id,key:key)
             } else {
                 VStack(spacing:5) {
-                    HStack { Text(p.title);Spacer();Text(value(key).formatted(.number.precision(.fractionLength(key == "seed" ? 0:2)))).font(.system(size:11,design:.monospaced)).foregroundStyle(.secondary) }
+                    HStack { Text(p.title);Spacer();Text(value(key).formatted(.number.precision(.fractionLength(key == "seed" ? 0:2)))).font(.editorValue).foregroundStyle(.secondary) }
                     // The original trace speed control is logarithmic across 0.05–10.
                     let logarithmic=key == "speed"
                     ParameterControl(value:Binding(get:{ logarithmic ? log(max(p.min,value(key))):value(key) },set:{ raw in
@@ -43,7 +43,7 @@ struct TraceInspector: View {
     }
     var body: some View {
         VStack(alignment:.leading,spacing:12) {
-            Text("LIGHTNING PULSES").font(.system(size:10,weight:.semibold,design:.monospaced)).foregroundStyle(.secondary)
+            Text("LIGHTNING PULSES").font(.editorHeading).foregroundStyle(.secondary)
             control("rate");control("speed");control("brightness")
             DisclosureGroup("Pulse shape",isExpanded:$detail) {
                 VStack(spacing:12) { ForEach(["burst","jitter","length","tail","crackle","forks","top_spray"],id:\.self) { control($0) } }.padding(.top,8)
